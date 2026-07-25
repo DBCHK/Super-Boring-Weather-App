@@ -73,6 +73,21 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
         loadWeatherForSelectedCity()
     }
 
+    fun detectUserLocation() {
+        viewModelScope.launch {
+            _weatherUiState.value = WeatherUiState.Loading
+            val locationHelper = com.example.util.LocationHelper(getApplication())
+            val detectedCity = locationHelper.getCurrentUserLocation()
+            if (detectedCity != null) {
+                _selectedCity.value = detectedCity
+                repository.saveCity(detectedCity)
+                loadWeatherForSelectedCity()
+            } else {
+                loadWeatherForSelectedCity()
+            }
+        }
+    }
+
     fun selectCity(city: CityEntity) {
         _selectedCity.value = city
         _selectedHourIndex.value = 0

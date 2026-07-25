@@ -117,8 +117,8 @@ fun DetailedForecastScreen(
                     .padding(vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val tabs = listOf("PRECIP", "WIND", "UV & AIR", "7-DAY")
-                tabs.forEachIndexed { idx, label ->
+                val tabs = listOf("PRECIP" to "tab_precip", "WIND" to "tab_wind", "UV & AIR" to "tab_uv_air", "7-DAY" to "tab_7day")
+                tabs.forEachIndexed { idx, (label, tag) ->
                     val isSel = selectedTab == idx
                     Box(
                         modifier = Modifier
@@ -126,7 +126,8 @@ fun DetailedForecastScreen(
                             .clip(RoundedCornerShape(16.dp))
                             .background(if (isSel) Color(0xFF1C1C1E) else Color(0xFFE5E5EA))
                             .clickable { selectedTab = idx }
-                            .padding(vertical = 10.dp),
+                            .padding(vertical = 10.dp)
+                            .testTag(tag),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(

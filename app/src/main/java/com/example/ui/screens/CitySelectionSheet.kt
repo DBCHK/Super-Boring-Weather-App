@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +45,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CityEntity
 
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.runtime.remember
+import android.view.HapticFeedbackConstants
+import com.example.util.PianoSoundManager
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CitySelectionSheet(
@@ -57,8 +63,20 @@ fun CitySelectionSheet(
     onSelectCity: (CityEntity) -> Unit,
     onSaveCity: (CityEntity) -> Unit,
     onDeleteCity: (CityEntity) -> Unit,
+    onDetectLocation: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val view = LocalView.current
+    val context = view.context.applicationContext
+    val soundManager = remember { PianoSoundManager(context) }
+
+    val playFeedback = remember {
+        {
+            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            soundManager.playSubtlePianoNote()
+        }
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -87,7 +105,10 @@ fun CitySelectionSheet(
                 )
 
                 IconButton(
-                    onClick = onDismiss,
+                    onClick = {
+                        playFeedback()
+                        onDismiss()
+                    },
                     modifier = Modifier
                         .clip(CircleShape)
                         .background(Color(0xFFE5E5EA))
@@ -201,13 +222,44 @@ fun CitySelectionSheet(
                     }
                 } else {
                     item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xFFE5E5EA))
+                                .clickable {
+                                    onDetectLocation()
+                                    onDismiss()
+                                }
+                                .padding(horizontal = 16.dp, vertical = 14.dp)
+                                .testTag("use_current_location_button"),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MyLocation,
+                                contentDescription = "Detect Location",
+                                tint = Color(0xFF1C1C1E),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "USE CURRENT LOCATION",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Black,
+                                fontFamily = FontFamily.Monospace,
+                                color = Color(0xFF1C1C1E)
+                            )
+                        }
+                    }
+
+                    item {
                         Text(
                             text = "SAVED LOCATIONS",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
                             color = Color(0xFF8E8E93),
-                            modifier = Modifier.padding(vertical = 4.dp)
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                         )
                     }
 

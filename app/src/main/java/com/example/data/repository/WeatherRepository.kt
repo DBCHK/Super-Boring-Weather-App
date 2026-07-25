@@ -57,6 +57,137 @@ class WeatherRepository(private val cityDao: CityDao) {
 
     suspend fun fetchWeather(city: CityEntity): WeatherForecastData = withContext(Dispatchers.IO) {
         try {
+            fetchFromOpenWeather(city)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            try {
+                fetchFromOpenMeteo(city)
+            } catch (ex: Exception) {
+                ex.printStackTrace()
+                generateMockWeatherForCity(city)
+            }
+        }
+    }
+
+    private suspend fun fetchFromOpenWeather(city: CityEntity): WeatherForecastData {
+        val currentResp = ApiClient.openWeatherApi.getCurrentWeather(city.latitude, city.longitude)
+        val forecastResp = ApiClient.openWeatherApi.getWeatherForecast(city.latitude, city.longitude)
+
+        val weatherItem = currentResp.weather?.firstOrNull()
+        val weatherId = weatherItem?.id ?: 800
+        val icon = weatherItem?.icon ?: "d"
+        val condition = WeatherCondition.fromOpenWeatherId(weatherId, icon)
+
+        val currentTempC = currentResp.main?.temp ?: 18f
+        val currentTempF = celsiusToFahrenheit(currentTempC)
+        val highC = currentResp.main?.tempMax ?: (currentTempC + 3f)
+        val lowC = currentResp.main?.tempMin ?: (currentTempC - 4f)
+
+        val humidity = currentResp.main?.humidity ?: 65
+        val windSpeedMph = ((currentResp.wind?.speed ?: 4.5f) * 2.23694f * 10).roundToInt() / 10f
+        val windDeg = currentResp.wind?.deg ?: 180
+
+        val hourlyList = mutableListOf<HourlyForecast>()
+        val dailyList = mutableListOf<DailyForecast>()
+
+        val dayFormat = SimpleDateFormat("EEE", Locale.US)
+        val dateFormat = SimpleDateFormat("MMM d", Locale.US)
+        val hourFormat = SimpleDateFormat("ha", Locale.US)
+
+        val items = forecastResp.list ?: emptyList()
+
+        for ((idx, item) in items.take(12).withIndex()) {
+            val itemTempC = item.main?.temp ?: currentTempC
+            val itemWeather = item.weather?.firstOrNull()
+            val itemCond = WeatherCondition.fromOpenWeatherId(itemWeather?.id ?: 800, itemWeather?.icon ?: "d")
+            val dtMs = (item.dt ?: (System.currentTimeMillis() / 1000)) * 1000
+            val date = Date(dtMs)
+            val cal = Calendar.getInstance().apply { time = date }
+            val hourOfDay = cal.get(Calendar.HOUR_OF_DAY)
+            val label = if (idx == 0) "NOW" else hourFormat.format(date).uppercase()
+
+            hourlyList.add(
+                HourlyForecast(
+                    timeLabel = label,
+                    fullTime = item.dtTxt ?: "",
+                    hourOfDay = hourOfDay,
+                    tempC = itemTempC,
+                    tempF = celsiusToFahrenheit(itemTempC),
+                    condition = itemCond,
+                    precipChancePercent = ((item.pop ?: 0f) * 100).toInt(),
+                    precipRateInches = 0.05f,
+                    windSpeedMph = ((item.wind?.speed ?: 4f) * 2.23694f * 10).roundToInt() / 10f,
+                    windDirectionDegrees = item.wind?.deg ?: 180,
+                    humidityPercent = item.main?.humidity ?: 60,
+                    uvIndex = 3.8f,
+                    isDaytime = (itemWeather?.icon ?: "d").contains("d")
+                )
+            )
+        }
+
+        val groupedByDay = items.groupBy { item ->
+            val dtMs = (item.dt ?: (System.currentTimeMillis() / 1000)) * 1000
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(dtMs))
+        }
+
+        for ((idx, entry) in groupedByDay.entries.take(7).withIndex()) {
+            val dayItems = entry.value
+            val firstItem = dayItems.first()
+            val dtMs = (firstItem.dt ?: (System.currentTimeMillis() / 1000)) * 1000
+            val date = Date(dtMs)
+
+            val maxC = dayItems.mapNotNull { it.main?.tempMax }.maxOrNull() ?: currentTempC
+            val minC = dayItems.mapNotNull { it.main?.tempMin }.minOrNull() ?: currentTempC
+            val pop = dayItems.mapNotNull { it.pop }.maxOrNull() ?: 0f
+            val dayCond = WeatherCondition.fromOpenWeatherId(
+                firstItem.weather?.firstOrNull()?.id ?: 800,
+                firstItem.weather?.firstOrNull()?.icon ?: "d"
+            )
+
+            val dayName = if (idx == 0) "TODAY" else dayFormat.format(date).uppercase()
+            val dateLabel = dateFormat.format(date).uppercase()
+
+            dailyList.add(
+                DailyForecast(
+                    dayName = dayName,
+                    dateLabel = dateLabel,
+                    condition = dayCond,
+                    maxTempC = maxC,
+                    maxTempF = celsiusToFahrenheit(maxC),
+                    minTempC = minC,
+                    minTempF = celsiusToFahrenheit(minC),
+                    precipChancePercent = (pop * 100).toInt(),
+                    precipAmountInches = 0.1f
+                )
+            )
+        }
+
+        val cityName = if (!currentResp.name.isNullOrBlank()) currentResp.name else city.name
+
+        return WeatherForecastData(
+            cityName = cityName,
+            country = currentResp.sys?.country ?: city.country,
+            currentTempC = currentTempC,
+            currentTempF = currentTempF,
+            highTempC = highC,
+            highTempF = celsiusToFahrenheit(highC),
+            lowTempC = lowC,
+            lowTempF = celsiusToFahrenheit(lowC),
+            condition = condition,
+            humidityPercent = humidity,
+            windSpeedMph = windSpeedMph,
+            windDirectionDegrees = windDeg,
+            precipChancePercent = hourlyList.firstOrNull()?.precipChancePercent ?: 20,
+            precipRateInches = 0.05f,
+            uvIndex = 4.2f,
+            airQualityIndex = 35,
+            hourlyList = if (hourlyList.isNotEmpty()) hourlyList else generateMockHourly(),
+            dailyList = if (dailyList.isNotEmpty()) dailyList else generateMockDaily()
+        )
+    }
+
+    private suspend fun fetchFromOpenMeteo(city: CityEntity): WeatherForecastData {
+        return try {
             val response = ApiClient.weatherApi.getWeatherForecast(city.latitude, city.longitude)
             
             val currentDto = response.current

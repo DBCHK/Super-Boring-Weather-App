@@ -13,6 +13,7 @@ enum class WeatherCondition(val label: String) {
     HEAVY_RAIN("HEAVY RAIN"),
     SNOWY("SNOWY"),
     THUNDERSTORM("THUNDERSTORM"),
+    HAZE("HAZE / MIST"),
     WINDY("WINDY");
 
     companion object {
@@ -21,12 +22,26 @@ enum class WeatherCondition(val label: String) {
                 0 -> if (isDay) SUNNY else CLEAR
                 1, 2 -> PARTLY_CLOUDY
                 3 -> CLOUDY
-                45, 48 -> CLOUDY
+                45, 48 -> HAZE
                 51, 53, 55, 56, 57 -> RAINY
                 61, 63, 65, 66, 67, 80, 81, 82 -> RAINY
                 71, 73, 75, 77, 85, 86 -> SNOWY
                 95, 96, 99 -> THUNDERSTORM
                 else -> CLOUDY
+            }
+        }
+
+        fun fromOpenWeatherId(id: Int, iconStr: String = "d"): WeatherCondition {
+            val isDay = iconStr.contains("d")
+            return when (id) {
+                in 200..232 -> THUNDERSTORM
+                in 300..321, in 500..531 -> RAINY
+                in 600..622 -> SNOWY
+                in 701..781 -> HAZE
+                800 -> if (isDay) SUNNY else CLEAR
+                801, 802 -> PARTLY_CLOUDY
+                803, 804 -> CLOUDY
+                else -> if (isDay) SUNNY else CLEAR
             }
         }
     }
