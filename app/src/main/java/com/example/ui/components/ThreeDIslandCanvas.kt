@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -73,6 +74,16 @@ fun ThreeDIslandCanvas(
     var velY by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
 
+    // Auto-rotation effect when not dragging
+    LaunchedEffect(isDragging) {
+        if (!isDragging) {
+            while (true) {
+                rotY += 0.3f
+                delay(16)
+            }
+        }
+    }
+
     Box(
         modifier = modifier
             .pointerInput(Unit) {
@@ -90,8 +101,8 @@ fun ThreeDIslandCanvas(
                             while (!isDragging && (kotlin.math.abs(currentVx) > 0.05f || kotlin.math.abs(currentVy) > 0.05f)) {
                                 rotY += currentVx
                                 rotX -= currentVy
-                                currentVx *= 0.92f
-                                currentVy *= 0.92f
+                                currentVx *= 0.94f
+                                currentVy *= 0.94f
                                 delay(16)
                             }
                         }
@@ -99,10 +110,10 @@ fun ThreeDIslandCanvas(
                     onDragCancel = { isDragging = false },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        velX = dragAmount.x * 0.45f
-                        velY = dragAmount.y * 0.45f
+                        velX = dragAmount.x * 0.4f
+                        velY = dragAmount.y * 0.4f
                         rotY += velX
-                        rotX = (rotX - velY).coerceIn(-45f, 45f)
+                        rotX = (rotX - velY).coerceIn(-60f, 60f)
                     }
                 )
             }

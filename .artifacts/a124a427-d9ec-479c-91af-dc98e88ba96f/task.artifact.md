@@ -1,0 +1,3 @@
+- [x] Remove `debugConfig` from `app/build.gradle.kts`
+- [x] Verify build succeeds with default signing
+- [x] Create walkthrough

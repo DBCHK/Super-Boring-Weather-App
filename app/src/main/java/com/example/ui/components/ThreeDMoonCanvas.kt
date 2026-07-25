@@ -1,17 +1,12 @@
 package com.example.ui.components
 
 import android.view.HapticFeedbackConstants
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -43,20 +38,19 @@ fun ThreeDMoonCanvas(
     val soundManager = remember { PianoSoundManager(context) }
     val scope = rememberCoroutineScope()
 
-    val infiniteTransition = rememberInfiniteTransition(label = "moonAnim")
-    val autoRotate by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(20000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "autoRotate"
-    )
-
     var touchRotY by remember { mutableFloatStateOf(0f) }
     var velX by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
+
+    // Auto-rotation effect when not dragging
+    LaunchedEffect(isDragging) {
+        if (!isDragging) {
+            while (true) {
+                touchRotY += 0.3f
+                delay(16)
+            }
+        }
+    }
 
     Box(
         modifier = modifier
@@ -73,7 +67,7 @@ fun ThreeDMoonCanvas(
                             var currentVx = velX
                             while (!isDragging && kotlin.math.abs(currentVx) > 0.05f) {
                                 touchRotY += currentVx
-                                currentVx *= 0.92f
+                                currentVx *= 0.94f
                                 delay(16)
                             }
                         }
@@ -81,7 +75,7 @@ fun ThreeDMoonCanvas(
                     onDragCancel = { isDragging = false },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        velX = dragAmount.x * 0.45f
+                        velX = dragAmount.x * 0.4f
                         touchRotY += velX
                     }
                 )
@@ -93,7 +87,7 @@ fun ThreeDMoonCanvas(
             val centerY = size.height / 2f
             val moonRadius = (size.width.coerceAtMost(size.height) * 0.38f)
 
-            val rotationAngle = (touchRotY + (if (!isDragging) autoRotate * 0.1f else 0f))
+            val rotationAngle = touchRotY
 
             // 1. Base Dark Moon Sphere (Shadow side)
             drawCircle(

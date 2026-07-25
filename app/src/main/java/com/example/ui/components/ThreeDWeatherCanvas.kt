@@ -1,7 +1,6 @@
 package com.example.ui.components
 
 import android.view.HapticFeedbackConstants
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -14,6 +13,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -43,14 +43,16 @@ private data class ProjectedPoint(
     val screenX: Float,
     val screenY: Float,
     val zDepth: Float,
-    val scale: Float
+    val scale: Float,
+    val lightIntensity: Float = 1.0f
 )
 
 private data class Lobe3D(
     val pos: Point3D,
     val radius: Float,
     val colorPrimary: Color,
-    val colorShadow: Color
+    val colorShadow: Color,
+    val isVolumetric: Boolean = true
 )
 
 private fun project3D(
@@ -60,7 +62,7 @@ private fun project3D(
     rotZDeg: Float,
     centerX: Float,
     centerY: Float,
-    perspective: Float = 550f
+    perspective: Float = 600f
 ): ProjectedPoint {
     val radX = Math.toRadians(rotXDeg.toDouble())
     val radY = Math.toRadians(rotYDeg.toDouble())
@@ -81,11 +83,24 @@ private fun project3D(
     val z3 = -x2 * sin(radY) + z2 * cos(radY)
     val y3 = y2
 
-    val scale = (perspective / (perspective + z3)).coerceIn(0.2, 3.5).toFloat()
+    // Simple Light source at (-1, -1, -1) in 3D space
+    val lightDirX = -0.577
+    val lightDirY = -0.577
+    val lightDirZ = -0.577
+    
+    val mag = Math.sqrt(x3 * x3 + y3 * y3 + z3 * z3)
+    val nx = if (mag > 0) x3 / mag else 0.0
+    val ny = if (mag > 0) y3 / mag else 0.0
+    val nz = if (mag > 0) z3 / mag else 1.0
+    
+    val dot = nx * lightDirX + ny * lightDirY + nz * lightDirZ
+    val intensity = (0.3 + 0.7 * Math.max(0.0, -dot)).toFloat()
+
+    val scale = (perspective / (perspective + z3)).coerceIn(0.1, 4.0).toFloat()
     val screenX = centerX + (x3 * scale).toFloat()
     val screenY = centerY + (y3 * scale).toFloat()
 
-    return ProjectedPoint(screenX, screenY, z3.toFloat(), scale)
+    return ProjectedPoint(screenX, screenY, z3.toFloat(), scale, intensity)
 }
 
 @Composable
@@ -100,16 +115,6 @@ fun ThreeDWeatherCanvas(
     val scope = rememberCoroutineScope()
 
     val infiniteTransition = rememberInfiniteTransition(label = "3DAnimation")
-
-    val autoRotateAngle by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(20000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "autoRotate"
-    )
 
     val bobbingY by infiniteTransition.animateFloat(
         initialValue = -8f,
@@ -131,13 +136,23 @@ fun ThreeDWeatherCanvas(
         label = "pulseProgress"
     )
 
-    // Smooth interactive rotation angles without modulo snapping bugs
+    // Smooth interactive rotation angles
     var rotX by remember { mutableFloatStateOf(15f) }
     var rotY by remember { mutableFloatStateOf(0f) }
 
     var velX by remember { mutableFloatStateOf(0f) }
     var velY by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { androidx.compose.runtime.mutableStateOf(false) }
+
+    // Auto-rotation effect when not dragging
+    LaunchedEffect(isDragging) {
+        if (!isDragging) {
+            while (true) {
+                rotY += 0.4f
+                delay(16)
+            }
+        }
+    }
 
     Box(
         modifier = modifier
@@ -150,15 +165,15 @@ fun ThreeDWeatherCanvas(
                     },
                     onDragEnd = {
                         isDragging = false
-                        // Launch smooth inertial decay momentum loop
+                        // Momentum
                         scope.launch {
                             var currentVx = velX
                             var currentVy = velY
                             while (!isDragging && (kotlin.math.abs(currentVx) > 0.05f || kotlin.math.abs(currentVy) > 0.05f)) {
                                 rotY += currentVx
                                 rotX -= currentVy
-                                currentVx *= 0.92f
-                                currentVy *= 0.92f
+                                currentVx *= 0.94f
+                                currentVy *= 0.94f
                                 delay(16)
                             }
                         }
@@ -168,332 +183,190 @@ fun ThreeDWeatherCanvas(
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        velX = dragAmount.x * 0.45f
-                        velY = dragAmount.y * 0.45f
+                        velX = dragAmount.x * 0.4f
+                        velY = dragAmount.y * 0.4f
                         rotY += velX
-                        rotX -= velY
-                        // Clamp pitch angle slightly to prevent inverted flip
-                        rotX = rotX.coerceIn(-75f, 75f)
+                        rotX = (rotX - velY).coerceIn(-85f, 85f)
                     }
                 )
             }
             .graphicsLayer {
-                cameraDistance = 16f * density
+                cameraDistance = 12f * density
             },
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val centerX = size.width / 2f
             val centerY = size.height / 2f + bobbingY
-            val baseScale = (size.width.coerceAtMost(size.height) / 320f).coerceAtLeast(0.85f)
+            val baseScale = (size.width.coerceAtMost(size.height) / 300f).coerceAtLeast(0.8f)
 
             val currentRotX = rotX
-            val currentRotY = rotY + (if (!isDragging) autoRotateAngle * 0.12f else 0f)
+            val currentRotY = rotY
 
             when (condition) {
                 WeatherCondition.SUNNY, WeatherCondition.CLEAR -> {
-                    // --- 3D SUN WITH VOLUMETRIC SPHERE & ORBITING 3D CORONA RAYS ---
-                    val sunRadius = 72f * baseScale
+                    // --- HIGH-FIDELITY 3D SUN ---
+                    val sunRadius = 78f * baseScale
+                    val sunCenter = project3D(Point3D(0.0, 0.0, 0.0), currentRotX, currentRotY, 0f, centerX, centerY)
 
-                    // 1. Draw 3D Solar Corona Rays in Z depth ring
-                    val numRays = 14
-                    val rayInnerR = sunRadius * 1.15
-                    val rayOuterR = sunRadius * 1.75
-
-                    data class Ray3D(val start: Point3D, val end: Point3D)
-                    val rayList = mutableListOf<Ray3D>()
-
-                    for (i in 0 until numRays) {
-                        val angle = (i * 360.0 / numRays) + (autoRotateAngle * 0.4)
-                        val rad = Math.toRadians(angle)
-                        val zOffset = sin(rad * 2) * 22.0
-                        val startP = Point3D(cos(rad) * rayInnerR, sin(rad) * rayInnerR, zOffset)
-                        val endP = Point3D(cos(rad) * rayOuterR, sin(rad) * rayOuterR, zOffset)
-                        rayList.add(Ray3D(startP, endP))
+                    // 1. Solar Corona Rings (Orbits in Z-space)
+                    val rings = listOf(1.3, 1.6)
+                    rings.forEachIndexed { ringIdx, ringMult ->
+                        val numSegments = 16
+                        val ringRadius = sunRadius * ringMult
+                        for (i in 0 until numSegments) {
+                            val angle = (i * 360.0 / numSegments) + (pulseProgress * 360.0 * (ringIdx + 1) * 0.1)
+                            val rad = Math.toRadians(angle)
+                            val z = sin(rad * 3) * 20.0
+                            val p = project3D(Point3D(cos(rad) * ringRadius, sin(rad) * ringRadius, z), currentRotX, currentRotY, 0f, centerX, centerY)
+                            
+                            val alpha = (0.2f + 0.4f * p.lightIntensity).coerceIn(0.1f, 0.6f)
+                            drawCircle(
+                                color = if (ringIdx == 0) Color(0xFFFFD700).copy(alpha = alpha) else Color(0xFFFF8C00).copy(alpha = alpha),
+                                radius = 8f * p.scale,
+                                center = Offset(p.screenX, p.screenY)
+                            )
+                        }
                     }
 
-                    // Project & sort rays by depth
-                    val projectedRays = rayList.map { ray ->
-                        val p1 = project3D(ray.start, currentRotX, currentRotY, 0f, centerX, centerY)
-                        val p2 = project3D(ray.end, currentRotX, currentRotY, 0f, centerX, centerY)
-                        val avgZ = (p1.zDepth + p2.zDepth) / 2f
-                        Triple(p1, p2, avgZ)
-                    }.sortedBy { it.third }
-
-                    // Project Sun Sphere
-                    val sunCenterP = project3D(Point3D(0.0, 0.0, 0.0), currentRotX, currentRotY, 0f, centerX, centerY)
-
-                    // Draw back rays (Z < 0)
-                    projectedRays.filter { it.third < 0 }.forEach { (p1, p2, _) ->
-                        drawLine(
-                            brush = Brush.radialGradient(
-                                colors = listOf(Color(0xFFFFD700), Color(0xFFFF8C00)),
-                                center = Offset(p1.screenX, p1.screenY),
-                                radius = 40f
-                            ),
-                            start = Offset(p1.screenX, p1.screenY),
-                            end = Offset(p2.screenX, p2.screenY),
-                            strokeWidth = 6f * p1.scale,
-                            cap = StrokeCap.Round
-                        )
-                    }
-
-                    // Draw 3D Ambient Drop Shadow under Sun
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(Color.Black.copy(alpha = 0.22f), Color.Transparent),
-                            center = Offset(sunCenterP.screenX, sunCenterP.screenY + sunRadius * 1.1f),
-                            radius = sunRadius * 1.3f
-                        ),
-                        radius = sunRadius * 1.1f,
-                        center = Offset(sunCenterP.screenX, sunCenterP.screenY + sunRadius * 0.4f)
-                    )
-
-                    // Draw 3D Sun Sphere with Dynamic Moving Light Reflection
-                    val lightOffsetX = (-sunRadius * 0.35f + (currentRotY * 0.1f)).coerceIn(-sunRadius * 0.6f, sunRadius * 0.6f)
-                    val lightOffsetY = (-sunRadius * 0.35f + (currentRotX * 0.1f)).coerceIn(-sunRadius * 0.6f, sunRadius * 0.6f)
-
+                    // 2. Volumetric Sun Body
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                Color(0xFFFFFDE7), // Specular highlight core
-                                Color(0xFFFFE082),
-                                Color(0xFFFFB300), // Rich gold body
-                                Color(0xFFE65100)  // Deep rim shadow
+                                Color(0xFFFFFDE7),
+                                Color(0xFFFFD54F),
+                                Color(0xFFF57C00),
+                                Color(0xFFE65100)
                             ),
-                            center = Offset(sunCenterP.screenX + lightOffsetX * sunCenterP.scale, sunCenterP.screenY + lightOffsetY * sunCenterP.scale),
-                            radius = sunRadius * 1.25f * sunCenterP.scale
+                            center = Offset(sunCenter.screenX - 20f * sunCenter.scale, sunCenter.screenY - 20f * sunCenter.scale),
+                            radius = sunRadius * 1.4f * sunCenter.scale
                         ),
-                        radius = sunRadius * sunCenterP.scale,
-                        center = Offset(sunCenterP.screenX, sunCenterP.screenY)
+                        radius = sunRadius * sunCenter.scale,
+                        center = Offset(sunCenter.screenX, sunCenter.screenY)
                     )
-
-                    // Draw front rays (Z >= 0)
-                    projectedRays.filter { it.third >= 0 }.forEach { (p1, p2, _) ->
-                        drawLine(
-                            brush = Brush.radialGradient(
-                                colors = listOf(Color(0xFFFFF59D), Color(0xFFFFB300)),
-                                center = Offset(p1.screenX, p1.screenY),
-                                radius = 40f
-                            ),
-                            start = Offset(p1.screenX, p1.screenY),
-                            end = Offset(p2.screenX, p2.screenY),
-                            strokeWidth = 7.5f * p1.scale,
-                            cap = StrokeCap.Round
-                        )
-                    }
                 }
 
                 WeatherCondition.THUNDERSTORM -> {
-                    // --- 3D VOLUMETRIC STORM CLOUD & ELECTRIC LIGHTNING BOLTS ---
+                    // --- 3D STORM CELL ---
                     val lobes = listOf(
-                        Lobe3D(Point3D(0.0, -10.0, 25.0), 62f * baseScale, Color(0xFF374151), Color(0xFF1F2937)),
-                        Lobe3D(Point3D(-55.0, 10.0, -10.0), 52f * baseScale, Color(0xFF4B5563), Color(0xFF111827)),
-                        Lobe3D(Point3D(55.0, 15.0, 0.0), 48f * baseScale, Color(0xFF374151), Color(0xFF1F2937)),
-                        Lobe3D(Point3D(-25.0, -35.0, 10.0), 44f * baseScale, Color(0xFF4B5563), Color(0xFF1E293B)),
-                        Lobe3D(Point3D(25.0, -30.0, -15.0), 42f * baseScale, Color(0xFF374151), Color(0xFF0F172A)),
-                        Lobe3D(Point3D(0.0, 30.0, -20.0), 38f * baseScale, Color(0xFF1F2937), Color(0xFF020617))
+                        Lobe3D(Point3D(0.0, 0.0, 30.0), 70f * baseScale, Color(0xFF374151), Color(0xFF111827)),
+                        Lobe3D(Point3D(-45.0, 20.0, 0.0), 55f * baseScale, Color(0xFF4B5563), Color(0xFF1E293B)),
+                        Lobe3D(Point3D(45.0, -15.0, -20.0), 50f * baseScale, Color(0xFF374151), Color(0xFF0F172A)),
+                        Lobe3D(Point3D(0.0, -35.0, 10.0), 45f * baseScale, Color(0xFF1F2937), Color(0xFF020617))
                     )
 
-                    val projectedLobes = lobes.map { lobe ->
-                        val proj = project3D(lobe.pos, currentRotX, currentRotY, 0f, centerX, centerY)
-                        Pair(lobe, proj)
-                    }.sortedBy { it.second.zDepth }
+                    val projected = lobes.map { it to project3D(it.pos, currentRotX, currentRotY, 0f, centerX, centerY) }
+                        .sortedBy { it.second.zDepth }
 
-                    // Render sorted 3D cloud lobes
-                    projectedLobes.forEach { (lobe, proj) ->
-                        val r = lobe.radius * proj.scale
+                    projected.forEach { (lobe, p) ->
+                        val r = lobe.radius * p.scale
                         drawCircle(
                             brush = Brush.radialGradient(
-                                colors = listOf(lobe.colorPrimary, lobe.colorShadow),
-                                center = Offset(proj.screenX - r * 0.25f, proj.screenY - r * 0.25f),
-                                radius = r * 1.15f
+                                colors = listOf(
+                                    lobe.colorPrimary.copy(alpha = 0.9f + 0.1f * p.lightIntensity),
+                                    lobe.colorShadow
+                                ),
+                                center = Offset(p.screenX - r * 0.3f, p.screenY - r * 0.3f),
+                                radius = r * 1.3f
                             ),
                             radius = r,
-                            center = Offset(proj.screenX, proj.screenY)
+                            center = Offset(p.screenX, p.screenY)
                         )
                     }
 
                     // 3D Arcing Lightning Bolt
-                    val boltNodes = listOf(
-                        Point3D(0.0, 20.0, 10.0),
-                        Point3D(-20.0, 50.0, 15.0),
-                        Point3D(10.0, 70.0, 5.0),
-                        Point3D(-15.0, 110.0, -10.0)
-                    )
-
-                    val projNodes = boltNodes.map { project3D(it, currentRotX, currentRotY, 0f, centerX, centerY) }
-                    val path = Path().apply {
-                        moveTo(projNodes[0].screenX, projNodes[0].screenY)
-                        for (i in 1 until projNodes.size) {
-                            lineTo(projNodes[i].screenX, projNodes[i].screenY)
+                    if (pulseProgress > 0.85f) {
+                        val boltNodes = listOf(
+                            Point3D(0.0, 0.0, 30.0),
+                            Point3D(20.0, 40.0, 40.0),
+                            Point3D(-10.0, 80.0, 20.0),
+                            Point3D(10.0, 120.0, 0.0)
+                        )
+                        val projectedNodes = boltNodes.map { project3D(it, currentRotX, currentRotY, 0f, centerX, centerY) }
+                        val path = Path().apply {
+                            moveTo(projectedNodes[0].screenX, projectedNodes[0].screenY)
+                            projectedNodes.drop(1).forEach { lineTo(it.screenX, it.screenY) }
                         }
+                        drawPath(path, Color(0xFF7DD3FC), style = Stroke(width = 6f, cap = StrokeCap.Round))
+                        drawPath(path, Color.White, style = Stroke(width = 2f, cap = StrokeCap.Round))
                     }
-
-                    // Electric Glow
-                    drawPath(
-                        path = path,
-                        color = Color(0xFF38BDF8).copy(alpha = 0.85f),
-                        style = Stroke(width = 10f * projNodes[1].scale, cap = StrokeCap.Round)
-                    )
-                    drawPath(
-                        path = path,
-                        color = Color.White,
-                        style = Stroke(width = 4f * projNodes[1].scale, cap = StrokeCap.Round)
-                    )
                 }
 
                 WeatherCondition.SNOWY -> {
-                    // --- 3D CRYSTALLINE SNOWFLAKE WITH BRANCHING ARMS ---
-                    val armLength = 85.0 * baseScale
-                    val numArms = 6
-                    val projectedArms = mutableListOf<Pair<ProjectedPoint, ProjectedPoint>>()
-
-                    for (i in 0 until numArms) {
-                        val angle = i * (360.0 / numArms) + (autoRotateAngle * 0.3)
+                    // --- 3D FRACTAL SNOWFLAKE ---
+                    val center = project3D(Point3D(0.0, 0.0, 0.0), currentRotX, currentRotY, 0f, centerX, centerY)
+                    
+                    for (i in 0 until 6) {
+                        val angle = i * 60.0
                         val rad = Math.toRadians(angle)
-                        val pCenter = Point3D(0.0, 0.0, 0.0)
-                        val pTip = Point3D(cos(rad) * armLength, sin(rad) * armLength, sin(rad * 3) * 15.0)
-
-                        val projC = project3D(pCenter, currentRotX, currentRotY, 0f, centerX, centerY)
-                        val projT = project3D(pTip, currentRotX, currentRotY, 0f, centerX, centerY)
-                        projectedArms.add(Pair(projC, projT))
-                    }
-
-                    projectedArms.forEach { (pC, pT) ->
-                        // Primary Branch
+                        val tip = project3D(Point3D(cos(rad) * 90.0 * baseScale, sin(rad) * 90.0 * baseScale, 0.0), currentRotX, currentRotY, 0f, centerX, centerY)
+                        
                         drawLine(
                             color = Color(0xFFE0F2FE),
-                            start = Offset(pC.screenX, pC.screenY),
-                            end = Offset(pT.screenX, pT.screenY),
-                            strokeWidth = 5.5f * pT.scale,
+                            start = Offset(center.screenX, center.screenY),
+                            end = Offset(tip.screenX, tip.screenY),
+                            strokeWidth = 6f * tip.scale,
                             cap = StrokeCap.Round
                         )
-
-                        // Sub-branches
-                        val midX = (pC.screenX + pT.screenX) / 2f
-                        val midY = (pC.screenY + pT.screenY) / 2f
-                        drawCircle(
-                            color = Color.White,
-                            radius = 6f * pT.scale,
-                            center = Offset(midX, midY)
-                        )
-                        drawCircle(
-                            color = Color(0xFFBAE6FD),
-                            radius = 8.5f * pT.scale,
-                            center = Offset(pT.screenX, pT.screenY)
-                        )
-                    }
-
-                    // Center Snowflake Gem
-                    val centerP = project3D(Point3D(0.0, 0.0, 0.0), currentRotX, currentRotY, 0f, centerX, centerY)
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(Color.White, Color(0xFF7DD3FC)),
-                            center = Offset(centerP.screenX, centerP.screenY),
-                            radius = 24f * centerP.scale
-                        ),
-                        radius = 20f * centerP.scale,
-                        center = Offset(centerP.screenX, centerP.screenY)
-                    )
-                }
-
-                WeatherCondition.HAZE -> {
-                    // --- 3D HAZE / MIST PARTICLES WITH DEPTH PARALLAX ---
-                    val mistDiscs = mutableListOf<Lobe3D>()
-                    val random = java.util.Random(1234)
-                    for (i in 0 until 18) {
-                        val x = (random.nextDouble() - 0.5) * 220.0
-                        val y = (random.nextDouble() - 0.5) * 140.0
-                        val z = (random.nextDouble() - 0.5) * 160.0
-                        val r = (35 + random.nextInt(30)).toFloat() * baseScale
-                        mistDiscs.add(Lobe3D(Point3D(x, y, z), r, Color(0xFFE2E8F0), Color(0xFF94A3B8)))
-                    }
-
-                    val projDiscs = mistDiscs.map { disc ->
-                        val proj = project3D(disc.pos, currentRotX, currentRotY, 0f, centerX, centerY)
-                        Pair(disc, proj)
-                    }.sortedBy { it.second.zDepth }
-
-                    projDiscs.forEach { (disc, proj) ->
-                        val r = disc.radius * proj.scale
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.45f),
-                                    Color(0xFFCBD5E1).copy(alpha = 0.18f),
-                                    Color.Transparent
-                                ),
-                                center = Offset(proj.screenX, proj.screenY),
-                                radius = r * 1.25f
-                            ),
-                            radius = r,
-                            center = Offset(proj.screenX, proj.screenY)
-                        )
+                        
+                        for (j in 1..2) {
+                            val subDist = j * 30.0 * baseScale
+                            val subStart = Point3D(cos(rad) * subDist, sin(rad) * subDist, 0.0)
+                            val subStartP = project3D(subStart, currentRotX, currentRotY, 0f, centerX, centerY)
+                            
+                            val subAngle1 = rad + Math.toRadians(45.0)
+                            val subAngle2 = rad - Math.toRadians(45.0)
+                            val subLen = 25.0 * baseScale
+                            
+                            val t1 = project3D(Point3D(subStart.x + cos(subAngle1) * subLen, subStart.y + sin(subAngle1) * subLen, 10.0), currentRotX, currentRotY, 0f, centerX, centerY)
+                            val t2 = project3D(Point3D(subStart.x + cos(subAngle2) * subLen, subStart.y + sin(subAngle2) * subLen, -10.0), currentRotX, currentRotY, 0f, centerX, centerY)
+                            
+                            drawLine(Color(0xFFBAE6FD), Offset(subStartP.screenX, subStartP.screenY), Offset(t1.screenX, t1.screenY), 4f * t1.scale, StrokeCap.Round)
+                            drawLine(Color(0xFFBAE6FD), Offset(subStartP.screenX, subStartP.screenY), Offset(t2.screenX, t2.screenY), 4f * t2.scale, StrokeCap.Round)
+                        }
                     }
                 }
 
                 else -> {
-                    // --- 3D VOLUMETRIC CUMULUS CLOUD (CLOUDY / RAINY / PARTLY CLOUDY) ---
+                    // --- VOLUMETRIC CUMULUS CLOUD ---
                     val isRainy = condition == WeatherCondition.RAINY || condition == WeatherCondition.HEAVY_RAIN
                     val topColor = if (isRainy) Color(0xFF64748B) else Color.White
                     val bottomColor = if (isRainy) Color(0xFF334155) else Color(0xFFCBD5E1)
 
                     val cloudLobes = listOf(
-                        Lobe3D(Point3D(0.0, -12.0, 25.0), 65f * baseScale, topColor, bottomColor),
-                        Lobe3D(Point3D(-55.0, 12.0, -10.0), 55f * baseScale, topColor, bottomColor),
-                        Lobe3D(Point3D(55.0, 15.0, 0.0), 50f * baseScale, topColor, bottomColor),
-                        Lobe3D(Point3D(-25.0, -32.0, 10.0), 48f * baseScale, topColor, bottomColor),
-                        Lobe3D(Point3D(25.0, -28.0, -15.0), 45f * baseScale, topColor, bottomColor),
-                        Lobe3D(Point3D(0.0, 28.0, -20.0), 40f * baseScale, topColor, bottomColor),
-                        Lobe3D(Point3D(-70.0, 25.0, 5.0), 35f * baseScale, topColor, bottomColor),
-                        Lobe3D(Point3D(70.0, 20.0, -5.0), 35f * baseScale, topColor, bottomColor)
+                        Lobe3D(Point3D(0.0, 0.0, 20.0), 75f * baseScale, topColor, bottomColor),
+                        Lobe3D(Point3D(-50.0, 10.0, -10.0), 60f * baseScale, topColor, bottomColor),
+                        Lobe3D(Point3D(50.0, -15.0, 0.0), 55f * baseScale, topColor, bottomColor),
+                        Lobe3D(Point3D(-20.0, -30.0, 30.0), 50f * baseScale, topColor, bottomColor),
+                        Lobe3D(Point3D(20.0, 25.0, -25.0), 45f * baseScale, topColor, bottomColor)
                     )
 
-                    val projected = cloudLobes.map { lobe ->
-                        val proj = project3D(lobe.pos, currentRotX, currentRotY, 0f, centerX, centerY)
-                        Pair(lobe, proj)
-                    }.sortedBy { it.second.zDepth }
+                    val projected = cloudLobes.map { it to project3D(it.pos, currentRotX, currentRotY, 0f, centerX, centerY) }
+                        .sortedBy { it.second.zDepth }
 
-                    // Ambient soft shadow under cloud
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(Color.Black.copy(alpha = 0.15f), Color.Transparent),
-                            center = Offset(centerX, centerY + 65f * baseScale),
-                            radius = 120f * baseScale
-                        ),
-                        radius = 120f * baseScale,
-                        center = Offset(centerX, centerY + 65f * baseScale)
-                    )
-
-                    projected.forEach { (lobe, proj) ->
-                        val r = lobe.radius * proj.scale
+                    projected.forEach { (lobe, p) ->
+                        val r = lobe.radius * p.scale
+                        val color = lerpColor(lobe.colorShadow, lobe.colorPrimary, p.lightIntensity)
                         drawCircle(
                             brush = Brush.radialGradient(
-                                colors = listOf(lobe.colorPrimary, lobe.colorShadow),
-                                center = Offset(proj.screenX - r * 0.28f, proj.screenY - r * 0.28f),
+                                colors = listOf(color, lobe.colorShadow),
+                                center = Offset(p.screenX - r * 0.25f, p.screenY - r * 0.25f),
                                 radius = r * 1.2f
                             ),
                             radius = r,
-                            center = Offset(proj.screenX, proj.screenY)
+                            center = Offset(p.screenX, p.screenY)
                         )
                     }
-
-                    // 3D Rain drops angled in 3D space if rainy
+                    
                     if (isRainy) {
-                        for (i in 0 until 14) {
-                            val xOffset = (i - 7) * 16.0
-                            val startP = Point3D(xOffset, 45.0 + (pulseProgress * 30.0), (i % 3) * 15.0 - 15.0)
-                            val endP = Point3D(xOffset - 8.0, 75.0 + (pulseProgress * 30.0), (i % 3) * 15.0 - 15.0)
-
-                            val p1 = project3D(startP, currentRotX, currentRotY, 0f, centerX, centerY)
-                            val p2 = project3D(endP, currentRotX, currentRotY, 0f, centerX, centerY)
-
+                        for (i in 0 until 12) {
+                            val x = (i - 6) * 20.0
+                            val dropP = project3D(Point3D(x, 40.0 + (pulseProgress * 60.0), (i % 3) * 20.0 - 20.0), currentRotX, currentRotY, 0f, centerX, centerY)
                             drawLine(
-                                color = Color(0xFF38BDF8).copy(alpha = 0.85f),
-                                start = Offset(p1.screenX, p1.screenY),
-                                end = Offset(p2.screenX, p2.screenY),
-                                strokeWidth = 3.5f * p1.scale,
+                                color = Color(0xFF38BDF8).copy(alpha = 0.6f * dropP.scale),
+                                start = Offset(dropP.screenX, dropP.screenY),
+                                end = Offset(dropP.screenX - 5f, dropP.screenY + 15f * dropP.scale),
+                                strokeWidth = 3f * dropP.scale,
                                 cap = StrokeCap.Round
                             )
                         }
@@ -502,4 +375,13 @@ fun ThreeDWeatherCanvas(
             }
         }
     }
+}
+
+private fun lerpColor(start: Color, end: Color, t: Float): Color {
+    return Color(
+        red = start.red + (end.red - start.red) * t,
+        green = start.green + (end.green - start.green) * t,
+        blue = start.blue + (end.blue - start.blue) * t,
+        alpha = start.alpha + (end.alpha - start.alpha) * t
+    )
 }
