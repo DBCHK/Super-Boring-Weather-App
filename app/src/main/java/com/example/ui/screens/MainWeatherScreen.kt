@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -43,14 +44,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.model.WeatherForecastData
 import com.example.ui.components.ThreeDDigitsRow
 import com.example.ui.components.ThreeDWeatherCanvas
 import com.example.ui.components.TimelineScrubber
@@ -61,6 +61,7 @@ import com.example.ui.viewmodel.TemperatureUnit
 import com.example.ui.viewmodel.WeatherUiState
 import com.example.util.rememberDropletFeedback
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 @Composable
 fun MainWeatherScreen(
@@ -176,12 +177,13 @@ fun MainWeatherScreen(
                 val hourly = data.hourlyList
                 val currentHourly = hourly.getOrNull(selectedHourIndex) ?: hourly.firstOrNull()
 
-                val displayedTemp = if (currentHourly != null) {
-                    if (temperatureUnit == TemperatureUnit.FAHRENHEIT) currentHourly.tempF.roundToInt()
-                    else currentHourly.tempC.roundToInt()
-                } else {
+                // Index 0 / NOW always uses live current temp for the selected city
+                val displayedTemp = if (selectedHourIndex == 0 || currentHourly == null) {
                     if (temperatureUnit == TemperatureUnit.FAHRENHEIT) data.currentTempF.roundToInt()
                     else data.currentTempC.roundToInt()
+                } else {
+                    if (temperatureUnit == TemperatureUnit.FAHRENHEIT) currentHourly.tempF.roundToInt()
+                    else currentHourly.tempC.roundToInt()
                 }
 
                 val highTemp = if (temperatureUnit == TemperatureUnit.FAHRENHEIT) data.highTempF.roundToInt() else data.highTempC.roundToInt()
@@ -206,7 +208,11 @@ fun MainWeatherScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Top
                     ) {
-                        // Top Navigation Header Bar
+                        // Compact top chrome — smaller chips & icons
+                        val chromeBg = if (themeMode == 1) Color(0xFF1C1C1E) else Color(0xFFE5E5EA)
+                        val chromeFg = if (themeMode == 1) Color.White else Color(0xFF1C1C1E)
+                        val chromeMuted = if (themeMode == 1) Color.White.copy(alpha = 0.45f) else Color(0xFF8E8E93)
+
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.fillMaxWidth()
@@ -214,155 +220,187 @@ fun MainWeatherScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 12.dp, start = 8.dp, end = 8.dp),
+                                    .padding(top = 8.dp, start = 4.dp, end = 4.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // City Switcher Button & Location Detector
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.weight(1f, fill = false)
                                 ) {
+                                    // City pill
                                     Row(
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(20.dp))
-                                            .background(if (themeMode == 1) Color(0xFF1C1C1E) else Color(0xFFE5E5EA))
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(chromeBg)
                                             .clickable {
                                                 playFeedback()
                                                 onOpenCitySheet()
                                             }
-                                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                                            .padding(horizontal = 10.dp, vertical = 5.dp)
                                             .testTag("city_selector_button"),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.LocationOn,
                                             contentDescription = "Cities",
-                                            tint = if (themeMode == 1) Color.White else Color(0xFF1C1C1E),
-                                            modifier = Modifier.size(16.dp)
+                                            tint = chromeFg,
+                                            modifier = Modifier.size(12.dp)
                                         )
                                         Text(
                                             text = data.cityName.uppercase(),
-                                            fontSize = 13.sp,
+                                            fontSize = 11.sp,
                                             fontWeight = FontWeight.Black,
                                             fontFamily = FontFamily.Monospace,
-                                            color = if (themeMode == 1) Color.White else Color(0xFF1C1C1E)
+                                            color = chromeFg,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
 
-                                    IconButton(
-                                        onClick = {
-                                            playFeedback()
-                                            onDetectLocation()
-                                        },
+                                    // Detect location — slim circular hit target
+                                    Box(
                                         modifier = Modifier
-                                            .size(34.dp)
+                                            .size(26.dp)
                                             .clip(CircleShape)
-                                            .background(if (themeMode == 1) Color(0xFF1C1C1E) else Color(0xFFE5E5EA))
-                                            .testTag("detect_location_button")
+                                            .background(chromeBg)
+                                            .clickable {
+                                                playFeedback()
+                                                onDetectLocation()
+                                            }
+                                            .testTag("detect_location_button"),
+                                        contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.MyLocation,
                                             contentDescription = "Detect Location",
-                                            tint = if (themeMode == 1) Color.White else Color(0xFF1C1C1E),
-                                            modifier = Modifier.size(16.dp)
+                                            tint = chromeFg,
+                                            modifier = Modifier.size(12.dp)
                                         )
                                     }
 
-                                    // Theme Mode Switcher Palette Button (Matching Image 5)
-                                    IconButton(
-                                        onClick = {
-                                            playFeedback()
-                                            themeMode = (themeMode + 1) % 3
-                                        },
+                                    // Theme
+                                    Box(
                                         modifier = Modifier
-                                            .size(34.dp)
+                                            .size(26.dp)
                                             .clip(CircleShape)
-                                            .background(if (themeMode == 1) Color(0xFF1C1C1E) else Color(0xFFE5E5EA))
-                                            .testTag("theme_switcher_button")
+                                            .background(chromeBg)
+                                            .clickable {
+                                                playFeedback()
+                                                themeMode = (themeMode + 1) % 3
+                                            }
+                                            .testTag("theme_switcher_button"),
+                                        contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Palette,
                                             contentDescription = "Toggle Theme",
-                                            tint = if (themeMode == 1) Color.White else Color(0xFF1C1C1E),
-                                            modifier = Modifier.size(16.dp)
+                                            tint = chromeFg,
+                                            modifier = Modifier.size(12.dp)
                                         )
                                     }
                                 }
 
-                                // °F | °C Unit Capsule Button
+                                // Unit capsule — °C first (default)
                                 Row(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(20.dp))
-                                        .background(if (themeMode == 1) Color(0xFF1C1C1E) else Color(0xFFE5E5EA))
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(chromeBg)
                                         .clickable {
                                             playFeedback()
                                             onToggleUnit()
                                         }
-                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                        .padding(horizontal = 9.dp, vertical = 5.dp)
                                         .testTag("unit_toggle_button"),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
                                 ) {
                                     Text(
-                                        text = "°F",
-                                        fontSize = 12.sp,
-                                        fontWeight = if (temperatureUnit == TemperatureUnit.FAHRENHEIT) FontWeight.Black else FontWeight.Normal,
-                                        color = if (themeMode == 1) Color.White else (if (temperatureUnit == TemperatureUnit.FAHRENHEIT) Color(0xFF1C1C1E) else Color(0xFF8E8E93))
+                                        text = "°C",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (temperatureUnit == TemperatureUnit.CELSIUS) FontWeight.Black else FontWeight.Normal,
+                                        color = if (temperatureUnit == TemperatureUnit.CELSIUS) chromeFg else chromeMuted
                                     )
                                     Text(
                                         text = "|",
-                                        fontSize = 12.sp,
-                                        color = Color(0xFF8E8E93)
+                                        fontSize = 10.sp,
+                                        color = chromeMuted
                                     )
                                     Text(
-                                        text = "°C",
-                                        fontSize = 12.sp,
-                                        fontWeight = if (temperatureUnit == TemperatureUnit.CELSIUS) FontWeight.Black else FontWeight.Normal,
-                                        color = if (themeMode == 1) Color.White else (if (temperatureUnit == TemperatureUnit.CELSIUS) Color(0xFF1C1C1E) else Color(0xFF8E8E93))
+                                        text = "°F",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (temperatureUnit == TemperatureUnit.FAHRENHEIT) FontWeight.Black else FontWeight.Normal,
+                                        color = if (temperatureUnit == TemperatureUnit.FAHRENHEIT) chromeFg else chromeMuted
                                     )
                                 }
                             }
 
-                            // Image 5 Quote Banner Headline when Gold/Yellow Theme active
+                            // Yellow theme: hero quote + rotating humorous lines
                             if (themeMode == 1) {
-                                Spacer(modifier = Modifier.height(12.dp))
+                                val yellowQuotes = remember {
+                                    listOf(
+                                        "LIFE'S TOO SHORT TO WASTE TIME ON BORING APPS",
+                                        "UMBRELLA? THAT'S CUTE. THE CLOUDS SAID NO.",
+                                        "WEATHER SO EXTRA IT NEEDS A PUBLICIST",
+                                        "SUN'S OUT. EXCUSES ARE CANCELLED.",
+                                        "IF RAIN HAD A PERSONALITY, IT'D BE PETTY",
+                                        "HOT TAKE: IT'S LITERALLY HOT",
+                                        "CLOUDS DOING THE MOST. AGAIN.",
+                                        "FORECAST: 100% CHANCE OF CHAOS"
+                                    )
+                                }
+                                var quoteIndex by remember { mutableIntStateOf(0) }
+                                LaunchedEffect(themeMode) {
+                                    quoteIndex = 0
+                                    while (true) {
+                                        delay(4500)
+                                        quoteIndex = (quoteIndex + 1) % yellowQuotes.size
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
                                 Text(
-                                    text = "Life's too short to waste on boring apps.",
-                                    fontSize = 20.sp,
+                                    text = yellowQuotes[quoteIndex],
+                                    fontSize = 15.sp,
                                     fontWeight = FontWeight.Black,
                                     fontFamily = FontFamily.SansSerif,
                                     textAlign = TextAlign.Center,
                                     color = Color(0xFF1C1C1E),
-                                    modifier = Modifier.padding(horizontal = 16.dp)
+                                    letterSpacing = 0.3.sp,
+                                    lineHeight = 20.sp,
+                                    modifier = Modifier.padding(horizontal = 18.dp)
                                 )
                             }
                         }
 
-                        // Hero 3D Weather + Temperature — sized for mobile screens
+                        // Hero 3D Weather + Temperature — slightly larger models over digits
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy((-12).dp),
+                            verticalArrangement = Arrangement.spacedBy((-16).dp),
                             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
                         ) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(200.dp),
+                                    .height(240.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 ThreeDWeatherCanvas(
                                     condition = condition,
                                     isDaytime = currentHourly?.isDaytime ?: true,
-                                    modelScale = 1.35f,
+                                    modelScale = 1.85f,
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
 
                             val tempInteraction = rememberInteractive3DState(
-                                initialPitch = 10f,
-                                autoSpinDegPerSec = 10f
+                                initialPitch = 0f,
+                                initialYaw = 0f,
+                                maxPitch = 0f,
+                                maxYaw = 38f, // never flip past readable range
+                                autoSpinDegPerSec = 12f,
+                                autoSpinOscillate = true // left ↔ right, not full 360°
                             )
                             ThreeDDigitsRow(
                                 number = displayedTemp,

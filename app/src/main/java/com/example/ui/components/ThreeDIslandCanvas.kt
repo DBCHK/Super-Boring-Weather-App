@@ -97,8 +97,8 @@ fun ThreeDIslandCanvas(
         label = "rainProgress"
     )
 
-    val rotX = interaction.pitch
-    val rotY = interaction.yaw
+    val rotX = interaction.renderPitch
+    val rotY = interaction.renderYaw
     // Intensity of rain based on precip rate
     val dropCount = (6 + (precipRateInches * 40f).toInt()).coerceIn(6, 22)
 

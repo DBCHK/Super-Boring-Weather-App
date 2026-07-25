@@ -57,7 +57,7 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     private val _selectedHourIndex = MutableStateFlow(0)
     val selectedHourIndex: StateFlow<Int> = _selectedHourIndex.asStateFlow()
 
-    private val _temperatureUnit = MutableStateFlow(TemperatureUnit.FAHRENHEIT)
+    private val _temperatureUnit = MutableStateFlow(TemperatureUnit.CELSIUS)
     val temperatureUnit: StateFlow<TemperatureUnit> = _temperatureUnit.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
@@ -85,6 +85,7 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     val pinnedWidgets: StateFlow<List<WidgetType>> = _pinnedWidgets.asStateFlow()
 
     private var searchJob: Job? = null
+    private var weatherJob: Job? = null
 
     init {
         // Pre-populate default cities into Room DB if empty
@@ -123,8 +124,9 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
             val detectedCity = locationHelper.getCurrentUserLocation()
             if (detectedCity != null) {
                 _selectedCity.value = detectedCity
+                _selectedHourIndex.value = 0
                 repository.saveCity(detectedCity)
-                loadWeatherForSelectedCity()
+                loadWeatherForCity(detectedCity)
             } else {
                 loadWeatherForSelectedCity()
             }
@@ -134,7 +136,7 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     fun selectCity(city: CityEntity) {
         _selectedCity.value = city
         _selectedHourIndex.value = 0
-        loadWeatherForSelectedCity()
+        loadWeatherForCity(city)
     }
 
     fun toggleTemperatureUnit() {
@@ -185,13 +187,26 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun loadWeatherForSelectedCity() {
-        viewModelScope.launch {
+        loadWeatherForCity(_selectedCity.value)
+    }
+
+    private fun loadWeatherForCity(city: CityEntity) {
+        weatherJob?.cancel()
+        weatherJob = viewModelScope.launch {
             _weatherUiState.value = WeatherUiState.Loading
             try {
-                val data = repository.fetchWeather(_selectedCity.value)
-                _weatherUiState.value = WeatherUiState.Success(data)
+                // Capture city at call time so a slow response cannot overwrite a newer selection
+                val data = repository.fetchWeather(city)
+                if (_selectedCity.value.id == city.id) {
+                    _weatherUiState.value = WeatherUiState.Success(data)
+                    _selectedHourIndex.value = 0
+                }
             } catch (e: Exception) {
-                _weatherUiState.value = WeatherUiState.Error(e.localizedMessage ?: "Failed to load weather")
+                if (_selectedCity.value.id == city.id) {
+                    _weatherUiState.value = WeatherUiState.Error(
+                        e.localizedMessage ?: "Failed to load weather for ${city.name}"
+                    )
+                }
             }
         }
     }

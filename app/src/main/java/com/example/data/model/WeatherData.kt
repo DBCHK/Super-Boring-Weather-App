@@ -72,7 +72,11 @@ data class DailyForecast(
     val minTempC: Float,
     val minTempF: Float,
     val precipChancePercent: Int,
-    val precipAmountInches: Float
+    val precipAmountInches: Float,
+    /** Peak UV index for the day (0–11+). */
+    val uvIndexMax: Float = 0f,
+    /** Representative humidity for the day (%). */
+    val humidityPercent: Int = 50
 )
 
 data class WeatherForecastData(

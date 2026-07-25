@@ -53,10 +53,9 @@ import com.example.data.model.HourlyForecast
 import com.example.data.model.WeatherCondition
 import com.example.data.model.WeatherForecastData
 import com.example.ui.components.BlueWaveGraphCanvas
-import com.example.ui.components.LiveWidgetsView
 import com.example.ui.components.MoonPhaseView
+import com.example.ui.components.PrecipChanceHeroCanvas
 import com.example.ui.components.SevereWeatherAlertView
-import com.example.ui.components.ThreeDIslandCanvas
 import com.example.ui.components.ThreeDWeatherCanvas
 import com.example.ui.components.UvMeterCanvas
 import com.example.ui.components.WeeklyPrecipGraphCanvas
@@ -64,7 +63,6 @@ import com.example.ui.components.WindCompassCanvas
 import com.example.ui.components.WeatherFooter
 import com.example.ui.components.formatPrecipInches
 import com.example.ui.viewmodel.TemperatureUnit
-import com.example.ui.viewmodel.WidgetType
 import com.example.util.rememberDropletFeedback
 import kotlin.math.roundToInt
 
@@ -73,13 +71,11 @@ fun DetailedForecastScreen(
     data: WeatherForecastData,
     selectedHourIndex: Int,
     temperatureUnit: TemperatureUnit,
-    pinnedWidgets: List<WidgetType> = WidgetType.values().toList(),
-    onToggleWidgetPin: (WidgetType) -> Unit = {},
     onHourSelected: (Int) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0=PRECIP ... 6=7-DAY
+    var selectedTab by remember { mutableIntStateOf(0) } // 0=PRECIP … 5=7-DAY (no widgets)
     var isWeekMode by remember { mutableStateOf(false) }
     var selectedDayIndex by remember { mutableIntStateOf(0) }
 
@@ -157,7 +153,6 @@ fun DetailedForecastScreen(
             ) {
                 val tabs = listOf(
                     "PRECIP" to "tab_precip",
-                    "WIDGETS" to "tab_widgets",
                     "MOON" to "tab_moon",
                     "ALERTS" to "tab_alerts",
                     "WIND" to "tab_wind",
@@ -203,27 +198,18 @@ fun DetailedForecastScreen(
                 )
             }
 
-            // ── TAB 1: WIDGETS ────────────────────────────────────────────
+            // ── TAB 1: MOON ───────────────────────────────────────────────
             if (selectedTab == 1) {
-                LiveWidgetsView(
-                    data = data,
-                    pinnedWidgets = pinnedWidgets,
-                    onToggleWidgetPin = onToggleWidgetPin
-                )
-            }
-
-            // ── TAB 2: MOON ───────────────────────────────────────────────
-            if (selectedTab == 2) {
                 MoonPhaseView(data = data)
             }
 
-            // ── TAB 3: ALERTS ─────────────────────────────────────────────
-            if (selectedTab == 3) {
+            // ── TAB 2: ALERTS ─────────────────────────────────────────────
+            if (selectedTab == 2) {
                 SevereWeatherAlertView(data = data)
             }
 
-            // ── TAB 4: WIND ───────────────────────────────────────────────
-            if (selectedTab == 4) {
+            // ── TAB 3: WIND ───────────────────────────────────────────────
+            if (selectedTab == 3) {
                 WindTabContent(
                     data = data,
                     selectedHourIndex = selectedHourIndex,
@@ -233,19 +219,21 @@ fun DetailedForecastScreen(
                 )
             }
 
-            // ── TAB 5: UV & AIR ───────────────────────────────────────────
-            if (selectedTab == 5) {
+            // ── TAB 4: UV & AIR ───────────────────────────────────────────
+            if (selectedTab == 4) {
                 UvAirTabContent(
                     data = data,
                     selectedHourIndex = selectedHourIndex,
+                    selectedDayIndex = selectedDayIndex.coerceIn(0, data.dailyList.lastIndex.coerceAtLeast(0)),
                     isWeekMode = isWeekMode,
                     onWeekModeChange = { isWeekMode = it },
+                    onDaySelected = { selectedDayIndex = it },
                     playFeedback = playFeedback
                 )
             }
 
-            // ── TAB 6: 7-DAY ──────────────────────────────────────────────
-            if (selectedTab == 6) {
+            // ── TAB 5: 7-DAY ──────────────────────────────────────────────
+            if (selectedTab == 5) {
                 SevenDayTabContent(
                     data = data,
                     temperatureUnit = temperatureUnit,
@@ -306,11 +294,11 @@ private fun PrecipTabContent(
         nextRainHourLabel(data.hourlyList, selectedHourIndex)
     }
 
-    // Hero 3D island
+    // Unique liquid chance orb — fills to precip probability
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(220.dp)
+            .height(240.dp)
             .clip(RoundedCornerShape(28.dp))
             .background(
                 Brush.verticalGradient(
@@ -319,8 +307,9 @@ private fun PrecipTabContent(
             ),
         contentAlignment = Alignment.Center
     ) {
-        ThreeDIslandCanvas(
-            precipRateInches = displayRate.coerceAtLeast(0.02f),
+        PrecipChanceHeroCanvas(
+            chancePercent = displayChance,
+            rateInches = displayRate,
             modifier = Modifier.fillMaxSize()
         )
     }
@@ -786,18 +775,35 @@ private fun WindTabContent(
 private fun UvAirTabContent(
     data: WeatherForecastData,
     selectedHourIndex: Int,
+    selectedDayIndex: Int,
     isWeekMode: Boolean,
     onWeekModeChange: (Boolean) -> Unit,
+    onDaySelected: (Int) -> Unit,
     playFeedback: () -> Unit
 ) {
     val currentHourly = data.hourlyList.getOrNull(selectedHourIndex)
         ?: data.hourlyList.firstOrNull()
-    val uv = currentHourly?.uvIndex ?: data.uvIndex
-    val humidity = currentHourly?.humidityPercent ?: data.humidityPercent
+    val selectedDay = data.dailyList.getOrNull(selectedDayIndex)
+        ?: data.dailyList.firstOrNull()
+
+    val uv = if (isWeekMode) {
+        selectedDay?.uvIndexMax ?: data.uvIndex
+    } else {
+        currentHourly?.uvIndex ?: data.uvIndex
+    }
+    val humidity = if (isWeekMode) {
+        selectedDay?.humidityPercent ?: data.humidityPercent
+    } else {
+        currentHourly?.humidityPercent ?: data.humidityPercent
+    }
     val aqi = data.airQualityIndex
     val uvLabel = uvRiskLabel(uv)
     val aqiLabel = aqiRiskLabel(aqi)
-    val maxUv = data.hourlyList.maxOfOrNull { it.uvIndex } ?: uv
+    val maxUv = if (isWeekMode) {
+        data.dailyList.maxOfOrNull { it.uvIndexMax } ?: uv
+    } else {
+        data.hourlyList.maxOfOrNull { it.uvIndex } ?: uv
+    }
 
     Box(
         modifier = Modifier
@@ -822,18 +828,22 @@ private fun UvAirTabContent(
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        InfoChip(label = "UV", value = "${uv.roundToInt()} · $uvLabel", accent = uvColor(uv))
+        InfoChip(label = "UV", value = "${"%.1f".format(uv)} · $uvLabel", accent = uvColor(uv))
         InfoChip(label = "AQI", value = "$aqi · $aqiLabel", accent = aqiColor(aqi))
         InfoChip(label = "HUMIDITY", value = "$humidity%", accent = Color(0xFF30B0C7))
-        InfoChip(label = "PEAK UV", value = maxUv.roundToInt().toString(), accent = Color(0xFFFF3B30))
+        InfoChip(
+            label = if (isWeekMode) "WEEK PEAK UV" else "PEAK UV",
+            value = "%.1f".format(maxUv),
+            accent = Color(0xFFFF3B30)
+        )
     }
 
     Spacer(modifier = Modifier.height(14.dp))
 
     MetricCard {
         MetricRow(
-            label = "UV INDEX",
-            value = "${uv.roundToInt()} ($uvLabel)",
+            label = if (isWeekMode) "DAY PEAK UV" else "UV INDEX",
+            value = "${"%.1f".format(uv)} ($uvLabel)",
             valueColor = uvColor(uv)
         )
         MetricDivider()
@@ -846,8 +856,8 @@ private fun UvAirTabContent(
         MetricRow(label = "HUMIDITY", value = "$humidity%", valueColor = Color.White)
         MetricDivider()
         MetricRow(
-            label = "PEAK UV TODAY",
-            value = maxUv.roundToInt().toString(),
+            label = if (isWeekMode) "WEEK PEAK UV" else "PEAK UV TODAY",
+            value = "%.1f".format(maxUv),
             valueColor = Color(0xFFFF9500)
         )
         MetricDivider()
@@ -862,27 +872,77 @@ private fun UvAirTabContent(
             value = airAdvice(aqi),
             valueColor = Color(0xFF30B0C7)
         )
+        if (isWeekMode && selectedDay != null) {
+            MetricDivider()
+            MetricRow(
+                label = "DAY",
+                value = "${selectedDay.dayName} · ${selectedDay.dateLabel}",
+                valueColor = Color(0xFF8E8E93)
+            )
+        }
     }
 
+    Spacer(modifier = Modifier.height(16.dp))
+    Text(
+        text = if (isWeekMode) "UV BY DAY" else "UV BY HOUR",
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Black,
+        fontFamily = FontFamily.Monospace,
+        letterSpacing = 1.sp,
+        color = Color(0xFF8E8E93),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+    )
+
     if (isWeekMode) {
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "UV BY HOUR",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Black,
-            fontFamily = FontFamily.Monospace,
-            letterSpacing = 1.sp,
-            color = Color(0xFF8E8E93),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-        )
-        data.hourlyList.take(8).forEach { hour ->
+        data.dailyList.forEachIndexed { idx, day ->
+            val selected = idx == selectedDayIndex
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White)
+                    .background(if (selected) Color(0xFF1C1C1E) else Color.White)
+                    .clickable {
+                        playFeedback()
+                        onDaySelected(idx)
+                    }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = day.dayName,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = if (selected) Color.White else Color(0xFF1C1C1E)
+                    )
+                    Text(
+                        text = day.dateLabel,
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFF8E8E93)
+                    )
+                }
+                Text(
+                    text = "UV ${"%.1f".format(day.uvIndexMax)} · ${uvRiskLabel(day.uvIndexMax)} · ${day.humidityPercent}% RH",
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = if (selected) Color(0xFF64D2FF) else uvColor(day.uvIndexMax)
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+        }
+    } else {
+        data.hourlyList.take(12).forEachIndexed { idx, hour ->
+            val selected = idx == selectedHourIndex
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (selected) Color(0xFF1C1C1E) else Color.White)
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -891,13 +951,13 @@ private fun UvAirTabContent(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
-                    color = Color(0xFF1C1C1E)
+                    color = if (selected) Color.White else Color(0xFF1C1C1E)
                 )
                 Text(
-                    text = "UV ${hour.uvIndex.roundToInt()} · ${uvRiskLabel(hour.uvIndex)} · ${hour.humidityPercent}% RH",
+                    text = "UV ${"%.1f".format(hour.uvIndex)} · ${uvRiskLabel(hour.uvIndex)} · ${hour.humidityPercent}% RH",
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = uvColor(hour.uvIndex)
+                    color = if (selected) Color(0xFF64D2FF) else uvColor(hour.uvIndex)
                 )
             }
             Spacer(modifier = Modifier.height(6.dp))
@@ -1011,16 +1071,22 @@ private fun SevenDayTabContent(
                     Text("${selected.precipChancePercent}%", fontSize = 28.sp, fontWeight = FontWeight.Black, color = Color(0xFF30B0C7))
                 }
                 Column {
-                    Text("TOTAL", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Color(0xFF8E8E93))
+                    Text("UV", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Color(0xFF8E8E93))
                     Text(
-                        formatPrecipInches(selected.precipAmountInches),
-                        fontSize = 16.sp,
+                        "%.0f".format(selected.uvIndexMax),
+                        fontSize = 28.sp,
                         fontWeight = FontWeight.Black,
-                        color = Color(0xFF007AFF),
-                        modifier = Modifier.padding(top = 8.dp)
+                        color = Color(0xFFFF9500)
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "PRECIP ${formatPrecipInches(selected.precipAmountInches)} · RH ${selected.humidityPercent}%",
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace,
+                color = Color(0xFF8E8E93)
+            )
         }
     }
 

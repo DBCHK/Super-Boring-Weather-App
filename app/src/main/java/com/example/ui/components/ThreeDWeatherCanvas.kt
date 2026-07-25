@@ -119,9 +119,9 @@ fun ThreeDWeatherCanvas(
         label = "pulseProgress"
     )
 
-    // Read animated rotation each frame
-    val currentRotX = interaction.pitch
-    val currentRotY = interaction.yaw
+    // Read animated rotation each frame (includes gentle device-tilt hologram)
+    val currentRotX = interaction.renderPitch
+    val currentRotY = interaction.renderYaw
 
     val modelPath = when (condition) {
         WeatherCondition.SUNNY -> "models/sun.glb"

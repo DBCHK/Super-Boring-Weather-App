@@ -59,8 +59,10 @@ fun ThreeDDigitsRow(
         rememberModelInstance(modelLoader, "models/digit_$digit.glb")
     }
 
+    // Digits: yaw (left–right) only — pitch locked so they never tilt on Y,
+    // and yaw is clamped by Interactive3DState.maxYaw so they never flip reversed.
     Box(
-        modifier = modifier.interactive3D(interactionState, enablePitch = true),
+        modifier = modifier.interactive3D(interactionState, enablePitch = false),
         contentAlignment = Alignment.Center
     ) {
         SceneView(
@@ -84,8 +86,9 @@ fun ThreeDDigitsRow(
                         scaleToUnits = scaleToUnits,
                         position = Position(x = startX + index * spacing),
                         rotation = Rotation(
-                            x = interactionState.pitch,
-                            y = interactionState.yaw,
+                            // Drag pitch locked; tiny device tilt keeps hologram feel without flipping
+                            x = interactionState.devicePitchOffset * 0.45f,
+                            y = interactionState.renderYaw,
                             z = 0f
                         )
                     )

@@ -72,8 +72,8 @@ fun GlbModelRenderer(
                 scaleToUnits = scaleToUnits,
                 position = Position(y = offsetY),
                 rotation = Rotation(
-                    x = interactionState.pitch,
-                    y = interactionState.yaw,
+                    x = interactionState.renderPitch,
+                    y = interactionState.renderYaw,
                     z = 0f
                 )
             )

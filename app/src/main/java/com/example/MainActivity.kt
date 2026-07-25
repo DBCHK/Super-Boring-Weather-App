@@ -62,7 +62,6 @@ fun NotBoringWeatherApp(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
-    val pinnedWidgets by viewModel.pinnedWidgets.collectAsState()
 
     var showDetailsScreen by remember { mutableStateOf(false) }
     var showCitySheet by remember { mutableStateOf(false) }
@@ -145,8 +144,6 @@ fun NotBoringWeatherApp(
                         data = (weatherUiState as WeatherUiState.Success).data,
                         selectedHourIndex = selectedHourIndex,
                         temperatureUnit = temperatureUnit,
-                        pinnedWidgets = pinnedWidgets,
-                        onToggleWidgetPin = { viewModel.toggleWidgetPin(it) },
                         onHourSelected = { viewModel.setSelectedHourIndex(it) },
                         onClose = { showDetailsScreen = false }
                     )
