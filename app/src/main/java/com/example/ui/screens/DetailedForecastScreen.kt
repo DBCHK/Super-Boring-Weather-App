@@ -447,7 +447,7 @@ private fun PrecipTabContent(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(150.dp)
+                        .height(180.dp)
                         .testTag("weekly_precip_graph")
                 )
             } else {
@@ -460,7 +460,8 @@ private fun PrecipTabContent(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(150.dp)
+                        .height(200.dp)
+                        .testTag("hourly_precip_graph")
                 )
             }
         }

@@ -384,16 +384,22 @@ class WeatherRepository(private val cityDao: CityDao) {
         val currentHour = calendar.get(Calendar.HOUR_OF_DAY)
         val list = mutableListOf<HourlyForecast>()
 
-        val hours = listOf(0, 3, 6, 9, 12, 15, 18, 21)
+        // Varied precip chance curve (0–100%) so the hourly graph is never a flat line
+        val chanceCurve = listOf(12, 18, 28, 45, 68, 82, 74, 55, 38, 22, 14, 10)
+        val rateCurve = listOf(0f, 0f, 0.02f, 0.05f, 0.10f, 0.14f, 0.11f, 0.06f, 0.03f, 0f, 0f, 0f)
+
         for (i in 0 until 12) {
             val h = (currentHour + i * 2) % 24
             val label = if (i == 0) "NOW" else formatHourLabel(h)
             val isDay = h in 6..19
-            val cond = when (i % 4) {
-                0 -> WeatherCondition.CLOUDY
-                1 -> WeatherCondition.RAINY
-                2 -> if (isDay) WeatherCondition.SUNNY else WeatherCondition.CLEAR
-                else -> WeatherCondition.PARTLY_CLOUDY
+            val chance = chanceCurve[i]
+            val rate = rateCurve[i]
+            val cond = when {
+                chance >= 70 -> WeatherCondition.RAINY
+                chance >= 45 -> WeatherCondition.MOSTLY_CLOUDY
+                chance >= 25 -> WeatherCondition.PARTLY_CLOUDY
+                isDay -> WeatherCondition.SUNNY
+                else -> WeatherCondition.CLEAR
             }
 
             list.add(
@@ -404,8 +410,8 @@ class WeatherRepository(private val cityDao: CityDao) {
                     tempC = (14 + (i % 5)).toFloat(),
                     tempF = celsiusToFahrenheit((14 + (i % 5)).toFloat()),
                     condition = cond,
-                    precipChancePercent = if (cond == WeatherCondition.RAINY) 85 else 15,
-                    precipRateInches = if (cond == WeatherCondition.RAINY) 0.12f else 0.00f,
+                    precipChancePercent = chance,
+                    precipRateInches = rate,
                     windSpeedMph = 10f + (i * 1.2f),
                     windDirectionDegrees = 180 + (i * 15),
                     humidityPercent = 65 + (i * 2),
@@ -428,6 +434,8 @@ class WeatherRepository(private val cityDao: CityDao) {
             WeatherCondition.CLOUDY,
             WeatherCondition.RAINY
         )
+        val chanceCurve = listOf(35, 78, 10, 28, 12, 42, 70)
+        val amountCurve = listOf(0.05f, 0.28f, 0f, 0.04f, 0f, 0.08f, 0.22f)
 
         return days.mapIndexed { idx, day ->
             val maxC = 18f + (idx % 3)
@@ -440,8 +448,8 @@ class WeatherRepository(private val cityDao: CityDao) {
                 maxTempF = celsiusToFahrenheit(maxC),
                 minTempC = minC,
                 minTempF = celsiusToFahrenheit(minC),
-                precipChancePercent = if (conditions[idx] == WeatherCondition.RAINY) 75 else 20,
-                precipAmountInches = if (conditions[idx] == WeatherCondition.RAINY) 0.25f else 0.00f
+                precipChancePercent = chanceCurve[idx],
+                precipAmountInches = amountCurve[idx]
             )
         }
     }
