@@ -20,6 +20,16 @@ enum class TemperatureUnit {
     FAHRENHEIT, CELSIUS
 }
 
+enum class WidgetType(val title: String, val description: String) {
+    RED_SUN_ORB("Hero Red Sun Orb", "3D animated sun sphere with live temperature"),
+    THREE_DAY_FORECAST("3-Day Forecast", "Compact 3-day weather mini table"),
+    WIDE_RAIN_BANNER("Wide Rain & Temp Banner", "Full width banner with live condition and temperature bar"),
+    AIR_QUALITY("Air Quality Index", "Live AQI monitor widget"),
+    MOON_PHASE("3D Moon Phase", "Live lunar illumination and phase graphic"),
+    WIND_COMPASS("Wind & Direction", "Interactive wind compass widget"),
+    UV_METER("UV Index Meter", "Realtime ultraviolet risk indicator")
+}
+
 sealed interface WeatherUiState {
     object Loading : WeatherUiState
     data class Success(val data: WeatherForecastData) : WeatherUiState
@@ -55,9 +65,24 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
 
     private val _searchResults = MutableStateFlow<List<CityEntity>>(emptyList())
     val searchResults: StateFlow<List<CityEntity>> = _searchResults.asStateFlow()
+    val searchQueryResults: StateFlow<List<CityEntity>> = _searchResults.asStateFlow()
 
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
+
+    // Pinned Widgets State for user customization
+    private val _pinnedWidgets = MutableStateFlow(
+        listOf(
+            WidgetType.RED_SUN_ORB,
+            WidgetType.THREE_DAY_FORECAST,
+            WidgetType.WIDE_RAIN_BANNER,
+            WidgetType.AIR_QUALITY,
+            WidgetType.MOON_PHASE,
+            WidgetType.WIND_COMPASS,
+            WidgetType.UV_METER
+        )
+    )
+    val pinnedWidgets: StateFlow<List<WidgetType>> = _pinnedWidgets.asStateFlow()
 
     private var searchJob: Job? = null
 
@@ -71,6 +96,24 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
             }
         }
         loadWeatherForSelectedCity()
+
+        // 39-Minute Dynamic Auto-Refresh Loop
+        viewModelScope.launch {
+            while (true) {
+                delay(39 * 60 * 1000L) // Refresh weather data dynamically every 39 minutes
+                loadWeatherForSelectedCity()
+            }
+        }
+    }
+
+    fun toggleWidgetPin(widget: WidgetType) {
+        val current = _pinnedWidgets.value.toMutableList()
+        if (current.contains(widget)) {
+            current.remove(widget)
+        } else {
+            current.add(widget)
+        }
+        _pinnedWidgets.value = current
     }
 
     fun detectUserLocation() {

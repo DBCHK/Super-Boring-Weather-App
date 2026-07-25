@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,14 +12,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,10 +40,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.WeatherForecastData
 import com.example.ui.components.BlueWaveGraphCanvas
+import com.example.ui.components.LiveWidgetsView
+import com.example.ui.components.MoonPhaseView
+import com.example.ui.components.SevereWeatherAlertView
 import com.example.ui.components.ThreeDIslandCanvas
 import com.example.ui.components.UvMeterCanvas
 import com.example.ui.components.WindCompassCanvas
 import com.example.ui.viewmodel.TemperatureUnit
+import com.example.ui.viewmodel.WidgetType
+import com.example.util.rememberDropletFeedback
 import kotlin.math.roundToInt
 
 @Composable
@@ -52,12 +56,16 @@ fun DetailedForecastScreen(
     data: WeatherForecastData,
     selectedHourIndex: Int,
     temperatureUnit: TemperatureUnit,
+    pinnedWidgets: List<WidgetType> = WidgetType.values().toList(),
+    onToggleWidgetPin: (WidgetType) -> Unit = {},
     onHourSelected: (Int) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Precip, 1 = Wind, 2 = UV/Air, 3 = 7-Day
+    var selectedTab by remember { mutableIntStateOf(0) } // 0=PRECIP, 1=WIDGETS, 2=MOON, 3=ALERTS, 4=WIND, 5=UV&AIR, 6=7-DAY
     var isWeekMode by remember { mutableStateOf(false) }
+
+    val (playFeedback, _) = rememberDropletFeedback()
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -96,7 +104,10 @@ fun DetailedForecastScreen(
                 }
 
                 IconButton(
-                    onClick = onClose,
+                    onClick = {
+                        playFeedback()
+                        onClose()
+                    },
                     modifier = Modifier
                         .clip(CircleShape)
                         .background(Color(0xFFE5E5EA))
@@ -110,23 +121,34 @@ fun DetailedForecastScreen(
                 }
             }
 
-            // Tab Selector Chips (Precip, Wind, UV/Air, 7-Day)
+            // Tab Selector Chips Scrollable Row (Matching all 5 screenshot feature views)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 12.dp),
+                    .padding(vertical = 12.dp)
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val tabs = listOf("PRECIP" to "tab_precip", "WIND" to "tab_wind", "UV & AIR" to "tab_uv_air", "7-DAY" to "tab_7day")
+                val tabs = listOf(
+                    "PRECIP" to "tab_precip",
+                    "WIDGETS" to "tab_widgets",
+                    "MOON" to "tab_moon",
+                    "ALERTS" to "tab_alerts",
+                    "WIND" to "tab_wind",
+                    "UV & AIR" to "tab_uv_air",
+                    "7-DAY" to "tab_7day"
+                )
                 tabs.forEachIndexed { idx, (label, tag) ->
                     val isSel = selectedTab == idx
                     Box(
                         modifier = Modifier
-                            .weight(1f)
                             .clip(RoundedCornerShape(16.dp))
                             .background(if (isSel) Color(0xFF1C1C1E) else Color(0xFFE5E5EA))
-                            .clickable { selectedTab = idx }
-                            .padding(vertical = 10.dp)
+                            .clickable {
+                                playFeedback()
+                                selectedTab = idx
+                            }
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
                             .testTag(tag),
                         contentAlignment = Alignment.Center
                     ) {
@@ -141,11 +163,11 @@ fun DetailedForecastScreen(
                 }
             }
 
-            // TAB 0: PRECIPITATION CARD (Matching Image 2)
+            // TAB 0: PRECIPITATION CARD (Matching Image 1)
             if (selectedTab == 0) {
                 val currentHourly = data.hourlyList.getOrNull(selectedHourIndex) ?: data.hourlyList.first()
 
-                // 3D Floating Island Canvas
+                // 3D Floating Terrain Island Canvas
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -158,7 +180,7 @@ fun DetailedForecastScreen(
                     )
                 }
 
-                // Metrics Table Box (Matching Image 2: RATE, CHANCE, TYPE)
+                // Metrics Table Box (Matching Image 1: RATE, CHANCE, TYPE)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -223,13 +245,16 @@ fun DetailedForecastScreen(
                     BlueWaveGraphCanvas(
                         hourlyList = data.hourlyList,
                         selectedIndex = selectedHourIndex,
-                        onIndexSelected = onHourSelected,
+                        onIndexSelected = { idx ->
+                            playFeedback()
+                            onHourSelected(idx)
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(140.dp)
                     )
 
-                    // DAY / WEEK Toggle
+                    // DAY / WEEK Toggle Pill
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -248,7 +273,10 @@ fun DetailedForecastScreen(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(if (!isWeekMode) Color(0xFF1C1C1E) else Color.Transparent)
-                                    .clickable { isWeekMode = false }
+                                    .clickable {
+                                        playFeedback()
+                                        isWeekMode = false
+                                    }
                                     .padding(horizontal = 16.dp, vertical = 6.dp)
                             ) {
                                 Text(
@@ -264,7 +292,10 @@ fun DetailedForecastScreen(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(if (isWeekMode) Color(0xFF1C1C1E) else Color.Transparent)
-                                    .clickable { isWeekMode = true }
+                                    .clickable {
+                                        playFeedback()
+                                        isWeekMode = true
+                                    }
                                     .padding(horizontal = 16.dp, vertical = 6.dp)
                             ) {
                                 Text(
@@ -280,8 +311,27 @@ fun DetailedForecastScreen(
                 }
             }
 
-            // TAB 1: WIND CARD
+            // TAB 1: LIVE WIDGETS & MINUTE FORECASTS (Matching Image 2)
             if (selectedTab == 1) {
+                LiveWidgetsView(
+                    data = data,
+                    pinnedWidgets = pinnedWidgets,
+                    onToggleWidgetPin = onToggleWidgetPin
+                )
+            }
+
+            // TAB 2: MOON PHASES & ILLUMINATION (Matching Image 3)
+            if (selectedTab == 2) {
+                MoonPhaseView(data = data)
+            }
+
+            // TAB 3: SEVERE WEATHER ALERTS (Matching Image 4)
+            if (selectedTab == 3) {
+                SevereWeatherAlertView(data = data)
+            }
+
+            // TAB 4: WIND CARD
+            if (selectedTab == 4) {
                 val currentHourly = data.hourlyList.getOrNull(selectedHourIndex) ?: data.hourlyList.first()
 
                 Box(
@@ -338,8 +388,8 @@ fun DetailedForecastScreen(
                 }
             }
 
-            // TAB 2: UV & AIR QUALITY CARD
-            if (selectedTab == 2) {
+            // TAB 5: UV & AIR QUALITY CARD
+            if (selectedTab == 5) {
                 val currentHourly = data.hourlyList.getOrNull(selectedHourIndex) ?: data.hourlyList.first()
 
                 Box(
@@ -411,8 +461,8 @@ fun DetailedForecastScreen(
                 }
             }
 
-            // TAB 3: 7-DAY FORECAST STACK
-            if (selectedTab == 3) {
+            // TAB 6: 7-DAY FORECAST STACK
+            if (selectedTab == 6) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()

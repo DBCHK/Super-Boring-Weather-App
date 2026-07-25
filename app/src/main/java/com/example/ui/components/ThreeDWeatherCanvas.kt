@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import android.view.HapticFeedbackConstants
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -15,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,7 +29,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
 import com.example.data.model.WeatherCondition
+import com.example.util.PianoSoundManager
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -53,7 +60,7 @@ private fun project3D(
     rotZDeg: Float,
     centerX: Float,
     centerY: Float,
-    perspective: Float = 500f
+    perspective: Float = 550f
 ): ProjectedPoint {
     val radX = Math.toRadians(rotXDeg.toDouble())
     val radY = Math.toRadians(rotYDeg.toDouble())
@@ -74,7 +81,7 @@ private fun project3D(
     val z3 = -x2 * sin(radY) + z2 * cos(radY)
     val y3 = y2
 
-    val scale = (perspective / (perspective + z3)).coerceIn(0.1, 4.0).toFloat()
+    val scale = (perspective / (perspective + z3)).coerceIn(0.2, 3.5).toFloat()
     val screenX = centerX + (x3 * scale).toFloat()
     val screenY = centerY + (y3 * scale).toFloat()
 
@@ -87,23 +94,28 @@ fun ThreeDWeatherCanvas(
     isDaytime: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val view = LocalView.current
+    val context = view.context.applicationContext
+    val soundManager = remember { PianoSoundManager(context) }
+    val scope = rememberCoroutineScope()
+
     val infiniteTransition = rememberInfiniteTransition(label = "3DAnimation")
 
     val autoRotateAngle by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(16000, easing = LinearEasing),
+            animation = tween(20000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "autoRotate"
     )
 
     val bobbingY by infiniteTransition.animateFloat(
-        initialValue = -10f,
-        targetValue = 10f,
+        initialValue = -8f,
+        targetValue = 8f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2500, easing = FastOutSlowInEasing),
+            animation = tween(2400, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "bobbingY"
@@ -119,19 +131,51 @@ fun ThreeDWeatherCanvas(
         label = "pulseProgress"
     )
 
-    // Interactive 360-degree touch rotation angles
+    // Smooth interactive rotation angles without modulo snapping bugs
     var rotX by remember { mutableFloatStateOf(15f) }
     var rotY by remember { mutableFloatStateOf(0f) }
+
+    var velX by remember { mutableFloatStateOf(0f) }
+    var velY by remember { mutableFloatStateOf(0f) }
+    var isDragging by remember { androidx.compose.runtime.mutableStateOf(false) }
 
     Box(
         modifier = modifier
             .pointerInput(Unit) {
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    // Rotates 360 degrees smoothly in any direction
-                    rotY = (rotY + dragAmount.x * 0.75f) % 360f
-                    rotX = (rotX - dragAmount.y * 0.75f) % 360f
-                }
+                detectDragGestures(
+                    onDragStart = {
+                        isDragging = true
+                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                        soundManager.playWaterDropletSound()
+                    },
+                    onDragEnd = {
+                        isDragging = false
+                        // Launch smooth inertial decay momentum loop
+                        scope.launch {
+                            var currentVx = velX
+                            var currentVy = velY
+                            while (!isDragging && (kotlin.math.abs(currentVx) > 0.05f || kotlin.math.abs(currentVy) > 0.05f)) {
+                                rotY += currentVx
+                                rotX -= currentVy
+                                currentVx *= 0.92f
+                                currentVy *= 0.92f
+                                delay(16)
+                            }
+                        }
+                    },
+                    onDragCancel = {
+                        isDragging = false
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        velX = dragAmount.x * 0.45f
+                        velY = dragAmount.y * 0.45f
+                        rotY += velX
+                        rotX -= velY
+                        // Clamp pitch angle slightly to prevent inverted flip
+                        rotX = rotX.coerceIn(-75f, 75f)
+                    }
+                )
             }
             .graphicsLayer {
                 cameraDistance = 16f * density
@@ -141,18 +185,18 @@ fun ThreeDWeatherCanvas(
         Canvas(modifier = Modifier.fillMaxSize()) {
             val centerX = size.width / 2f
             val centerY = size.height / 2f + bobbingY
-            val baseScale = (size.width.coerceAtMost(size.height) / 320f).coerceAtLeast(0.8f)
+            val baseScale = (size.width.coerceAtMost(size.height) / 320f).coerceAtLeast(0.85f)
 
             val currentRotX = rotX
-            val currentRotY = rotY + autoRotateAngle * 0.15f // subtle idle spin
+            val currentRotY = rotY + (if (!isDragging) autoRotateAngle * 0.12f else 0f)
 
             when (condition) {
                 WeatherCondition.SUNNY, WeatherCondition.CLEAR -> {
                     // --- 3D SUN WITH VOLUMETRIC SPHERE & ORBITING 3D CORONA RAYS ---
-                    val sunRadius = 70f * baseScale
+                    val sunRadius = 72f * baseScale
 
                     // 1. Draw 3D Solar Corona Rays in Z depth ring
-                    val numRays = 12
+                    val numRays = 14
                     val rayInnerR = sunRadius * 1.15
                     val rayOuterR = sunRadius * 1.75
 
@@ -160,9 +204,9 @@ fun ThreeDWeatherCanvas(
                     val rayList = mutableListOf<Ray3D>()
 
                     for (i in 0 until numRays) {
-                        val angle = (i * 360.0 / numRays) + (autoRotateAngle * 0.5)
+                        val angle = (i * 360.0 / numRays) + (autoRotateAngle * 0.4)
                         val rad = Math.toRadians(angle)
-                        val zOffset = sin(rad * 2) * 20.0
+                        val zOffset = sin(rad * 2) * 22.0
                         val startP = Point3D(cos(rad) * rayInnerR, sin(rad) * rayInnerR, zOffset)
                         val endP = Point3D(cos(rad) * rayOuterR, sin(rad) * rayOuterR, zOffset)
                         rayList.add(Ray3D(startP, endP))
@@ -194,19 +238,31 @@ fun ThreeDWeatherCanvas(
                         )
                     }
 
-                    // Draw 3D Sun Sphere with 3D Specular Highlight
-                    val lightOffsetX = -sunRadius * 0.35f * sunCenterP.scale
-                    val lightOffsetY = -sunRadius * 0.35f * sunCenterP.scale
+                    // Draw 3D Ambient Drop Shadow under Sun
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(Color.Black.copy(alpha = 0.22f), Color.Transparent),
+                            center = Offset(sunCenterP.screenX, sunCenterP.screenY + sunRadius * 1.1f),
+                            radius = sunRadius * 1.3f
+                        ),
+                        radius = sunRadius * 1.1f,
+                        center = Offset(sunCenterP.screenX, sunCenterP.screenY + sunRadius * 0.4f)
+                    )
+
+                    // Draw 3D Sun Sphere with Dynamic Moving Light Reflection
+                    val lightOffsetX = (-sunRadius * 0.35f + (currentRotY * 0.1f)).coerceIn(-sunRadius * 0.6f, sunRadius * 0.6f)
+                    val lightOffsetY = (-sunRadius * 0.35f + (currentRotX * 0.1f)).coerceIn(-sunRadius * 0.6f, sunRadius * 0.6f)
+
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                Color(0xFFFFF9C4), // Bright specular core
-                                Color(0xFFFFD54F),
-                                Color(0xFFFF9800), // Deep orange rim
-                                Color(0xFFF57C00)
+                                Color(0xFFFFFDE7), // Specular highlight core
+                                Color(0xFFFFE082),
+                                Color(0xFFFFB300), // Rich gold body
+                                Color(0xFFE65100)  // Deep rim shadow
                             ),
-                            center = Offset(sunCenterP.screenX + lightOffsetX, sunCenterP.screenY + lightOffsetY),
-                            radius = sunRadius * 1.2f * sunCenterP.scale
+                            center = Offset(sunCenterP.screenX + lightOffsetX * sunCenterP.scale, sunCenterP.screenY + lightOffsetY * sunCenterP.scale),
+                            radius = sunRadius * 1.25f * sunCenterP.scale
                         ),
                         radius = sunRadius * sunCenterP.scale,
                         center = Offset(sunCenterP.screenX, sunCenterP.screenY)
@@ -222,7 +278,7 @@ fun ThreeDWeatherCanvas(
                             ),
                             start = Offset(p1.screenX, p1.screenY),
                             end = Offset(p2.screenX, p2.screenY),
-                            strokeWidth = 7f * p1.scale,
+                            strokeWidth = 7.5f * p1.scale,
                             cap = StrokeCap.Round
                         )
                     }
@@ -250,8 +306,8 @@ fun ThreeDWeatherCanvas(
                         drawCircle(
                             brush = Brush.radialGradient(
                                 colors = listOf(lobe.colorPrimary, lobe.colorShadow),
-                                center = Offset(proj.screenX - r * 0.2f, proj.screenY - r * 0.2f),
-                                radius = r * 1.1f
+                                center = Offset(proj.screenX - r * 0.25f, proj.screenY - r * 0.25f),
+                                radius = r * 1.15f
                             ),
                             radius = r,
                             center = Offset(proj.screenX, proj.screenY)
@@ -277,7 +333,7 @@ fun ThreeDWeatherCanvas(
                     // Electric Glow
                     drawPath(
                         path = path,
-                        color = Color(0xFF38BDF8).copy(alpha = 0.8f),
+                        color = Color(0xFF38BDF8).copy(alpha = 0.85f),
                         style = Stroke(width = 10f * projNodes[1].scale, cap = StrokeCap.Round)
                     )
                     drawPath(
@@ -310,7 +366,7 @@ fun ThreeDWeatherCanvas(
                             color = Color(0xFFE0F2FE),
                             start = Offset(pC.screenX, pC.screenY),
                             end = Offset(pT.screenX, pT.screenY),
-                            strokeWidth = 5f * pT.scale,
+                            strokeWidth = 5.5f * pT.scale,
                             cap = StrokeCap.Round
                         )
 
@@ -324,7 +380,7 @@ fun ThreeDWeatherCanvas(
                         )
                         drawCircle(
                             color = Color(0xFFBAE6FD),
-                            radius = 8f * pT.scale,
+                            radius = 8.5f * pT.scale,
                             center = Offset(pT.screenX, pT.screenY)
                         )
                     }
@@ -364,12 +420,12 @@ fun ThreeDWeatherCanvas(
                         drawCircle(
                             brush = Brush.radialGradient(
                                 colors = listOf(
-                                    Color.White.copy(alpha = 0.4f),
-                                    Color(0xFFCBD5E1).copy(alpha = 0.15f),
+                                    Color.White.copy(alpha = 0.45f),
+                                    Color(0xFFCBD5E1).copy(alpha = 0.18f),
                                     Color.Transparent
                                 ),
                                 center = Offset(proj.screenX, proj.screenY),
-                                radius = r * 1.2f
+                                radius = r * 1.25f
                             ),
                             radius = r,
                             center = Offset(proj.screenX, proj.screenY)
@@ -399,13 +455,24 @@ fun ThreeDWeatherCanvas(
                         Pair(lobe, proj)
                     }.sortedBy { it.second.zDepth }
 
+                    // Ambient soft shadow under cloud
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(Color.Black.copy(alpha = 0.15f), Color.Transparent),
+                            center = Offset(centerX, centerY + 65f * baseScale),
+                            radius = 120f * baseScale
+                        ),
+                        radius = 120f * baseScale,
+                        center = Offset(centerX, centerY + 65f * baseScale)
+                    )
+
                     projected.forEach { (lobe, proj) ->
                         val r = lobe.radius * proj.scale
                         drawCircle(
                             brush = Brush.radialGradient(
                                 colors = listOf(lobe.colorPrimary, lobe.colorShadow),
-                                center = Offset(proj.screenX - r * 0.25f, proj.screenY - r * 0.25f),
-                                radius = r * 1.15f
+                                center = Offset(proj.screenX - r * 0.28f, proj.screenY - r * 0.28f),
+                                radius = r * 1.2f
                             ),
                             radius = r,
                             center = Offset(proj.screenX, proj.screenY)
@@ -423,7 +490,7 @@ fun ThreeDWeatherCanvas(
                             val p2 = project3D(endP, currentRotX, currentRotY, 0f, centerX, centerY)
 
                             drawLine(
-                                color = Color(0xFF38BDF8).copy(alpha = 0.8f),
+                                color = Color(0xFF38BDF8).copy(alpha = 0.85f),
                                 start = Offset(p1.screenX, p1.screenY),
                                 end = Offset(p2.screenX, p2.screenY),
                                 strokeWidth = 3.5f * p1.scale,

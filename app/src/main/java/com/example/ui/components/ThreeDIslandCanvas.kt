@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -7,10 +8,16 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -19,12 +26,23 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
+import com.example.util.PianoSoundManager
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun ThreeDIslandCanvas(
     precipRateInches: Float,
     modifier: Modifier = Modifier
 ) {
+    val view = LocalView.current
+    val context = view.context.applicationContext
+    val soundManager = remember { PianoSoundManager(context) }
+    val scope = rememberCoroutineScope()
+
     val infiniteTransition = rememberInfiniteTransition(label = "3DIslandAnimation")
 
     // Floating animation for the 3D terrain island
@@ -49,8 +67,50 @@ fun ThreeDIslandCanvas(
         label = "rainProgress"
     )
 
+    var rotX by remember { mutableFloatStateOf(10f) }
+    var rotY by remember { mutableFloatStateOf(0f) }
+    var velX by remember { mutableFloatStateOf(0f) }
+    var velY by remember { mutableFloatStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
+
     Box(
-        modifier = modifier,
+        modifier = modifier
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = {
+                        isDragging = true
+                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                        soundManager.playWaterDropletSound()
+                    },
+                    onDragEnd = {
+                        isDragging = false
+                        scope.launch {
+                            var currentVx = velX
+                            var currentVy = velY
+                            while (!isDragging && (kotlin.math.abs(currentVx) > 0.05f || kotlin.math.abs(currentVy) > 0.05f)) {
+                                rotY += currentVx
+                                rotX -= currentVy
+                                currentVx *= 0.92f
+                                currentVy *= 0.92f
+                                delay(16)
+                            }
+                        }
+                    },
+                    onDragCancel = { isDragging = false },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        velX = dragAmount.x * 0.45f
+                        velY = dragAmount.y * 0.45f
+                        rotY += velX
+                        rotX = (rotX - velY).coerceIn(-45f, 45f)
+                    }
+                )
+            }
+            .graphicsLayer {
+                rotationX = rotX
+                rotationY = rotY
+                cameraDistance = 16f * density
+            },
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
