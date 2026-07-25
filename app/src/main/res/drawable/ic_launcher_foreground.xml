@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Drop Shadow -->
+    <path
+        android:fillColor="#1A000000"
+        android:pathData="M38,68 C38,62 44,56 52,56 C54,52 60,48 68,48 C76,48 82,53 84,59 C88,59 92,63 92,68 C92,73 88,77 82,77 L38,77 C32,77 28,73 28,68 Z" />
+    <!-- Sun disk behind cloud -->
+    <path
+        android:fillColor="#FF9500"
+        android:pathData="M36,44 A14,14 0 1,0 64,44 A14,14 0 1,0 36,44 Z" />
+    <!-- 3D Dark Cloud Foreground -->
+    <path
+        android:fillColor="#1C1C1E"
+        android:pathData="M34,64 C34,57 40,51 48,51 C50,46 57,42 65,42 C74,42 80,47 82,54 C87,54 90,58 90,64 C90,69 86,73 80,73 L34,73 C28,73 24,69 24,64 C24,59 28,55 34,55 Z" />
+</vector>

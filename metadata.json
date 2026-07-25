@@ -1,0 +1,6 @@
+{
+  "name": "Not Boring Weather",
+  "description": "Whimsical 3D motion graphics, giant sculpted typography, and intuitive gesture-based weather application.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
