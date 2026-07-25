@@ -39,7 +39,9 @@ fun ThreeDDigitsRow(
     fillColor: Color = Color(0xFF1C1C1E),
     shadeColor: Color = Color(0xFF3A3A3C),
     shadowColor: Color = Color(0xFFAEAEB2),
-    highlightColor: Color = Color(0xFF636366)
+    highlightColor: Color = Color(0xFF636366),
+    /** When false, parent owns drag/tilt so weather + digits move together. */
+    enableGestures: Boolean = true
 ) {
     val engine = rememberEngine()
     val modelLoader = rememberModelLoader(engine)
@@ -67,30 +69,44 @@ fun ThreeDDigitsRow(
         rememberModelInstance(modelLoader, "models/digit_$digit.glb")
     }
 
-    LaunchedEffect(modelInstances, fillColor, shadeColor) {
+    // IMPORTANT: key on number + colors only — never the list identity (recreated each frame).
+    // Re-tinting every rotation frame was the dark-mode digit flicker.
+    LaunchedEffect(number, fillColor, shadeColor) {
         modelInstances.forEach { inst ->
             inst?.applyThemeTint(fillColor, shadeColor)
         }
     }
 
+    // Shared rotation with weather hero — full linked pitch + yaw (pitch already clamped)
+    val yaw = interactionState.renderYaw
+    val pitch = interactionState.renderPitch
+
     Box(
-        modifier = modifier.interactive3D(interactionState, enablePitch = false),
+        modifier = if (enableGestures) {
+            modifier.interactive3D(
+                interactionState,
+                enablePitch = false,
+                enableDeviceTilt = true
+            )
+        } else {
+            modifier
+        },
         contentAlignment = Alignment.Center
     ) {
         // Soft ground shadow for depth / readability
         Canvas(modifier = Modifier.fillMaxSize()) {
             val cx = size.width / 2f
-            val cy = size.height * 0.72f
-            val shadowW = size.width * 0.42f
-            val shadowH = size.height * 0.12f
+            val cy = size.height * 0.78f
+            val shadowW = size.width * 0.38f
+            val shadowH = size.height * 0.10f
             drawOval(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        shadowColor.copy(alpha = 0.45f),
-                        shadowColor.copy(alpha = 0.12f),
+                        shadowColor.copy(alpha = 0.40f),
+                        shadowColor.copy(alpha = 0.10f),
                         Color.Transparent
                     ),
-                    center = Offset(cx + 6f, cy + 4f),
+                    center = Offset(cx + 4f, cy + 2f),
                     radius = shadowW
                 ),
                 topLeft = Offset(cx - shadowW, cy - shadowH),
@@ -106,27 +122,27 @@ fun ThreeDDigitsRow(
             view = view,
             environment = environment,
             isOpaque = false,
-            renderQuality = RenderQuality.Performance,
+            renderQuality = RenderQuality.Default,
             surfaceType = SurfaceType.TextureSurface
         ) {
-            // Lighting sculpts white/dark digits so they don't look flat
+            // Stable lighting — no per-frame tint
             LightNode(
                 type = LightManager.Type.DIRECTIONAL,
-                intensity = 110_000f,
+                intensity = 95_000f,
                 color = colorOf(Color.White),
-                direction = Direction(0.4f, -1f, -0.6f)
+                direction = Direction(0.35f, -1f, -0.55f)
             )
             LightNode(
                 type = LightManager.Type.DIRECTIONAL,
-                intensity = 42_000f,
+                intensity = 36_000f,
                 color = colorOf(
                     Color(
-                        highlightColor.red.coerceAtLeast(0.6f),
-                        highlightColor.green.coerceAtLeast(0.65f),
-                        highlightColor.blue.coerceAtLeast(0.7f)
+                        highlightColor.red.coerceAtLeast(0.55f),
+                        highlightColor.green.coerceAtLeast(0.58f),
+                        highlightColor.blue.coerceAtLeast(0.62f)
                     )
                 ),
-                direction = Direction(-0.6f, -0.2f, 0.5f)
+                direction = Direction(-0.55f, -0.25f, 0.45f)
             )
 
             val totalWidth = (digits.size - 1) * spacing
@@ -139,13 +155,10 @@ fun ThreeDDigitsRow(
                         scaleToUnits = scaleToUnits,
                         position = Position(x = startX + index * spacing),
                         rotation = Rotation(
-                            x = interactionState.devicePitchOffset * 0.45f,
-                            y = interactionState.renderYaw,
+                            x = pitch,
+                            y = yaw,
                             z = 0f
-                        ),
-                        apply = {
-                            instance.applyThemeTint(fillColor, shadeColor)
-                        }
+                        )
                     )
                 }
             }

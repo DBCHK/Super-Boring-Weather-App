@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg_white"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="14dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -22,20 +22,21 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="monospace"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.06"
                 android:text="AIR QUALITY"
                 android:textColor="#FF8E8E93"
-                android:textSize="10sp"
+                android:textSize="11sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/widget_aqi_value"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="monospace"
+                android:fontFamily="sans-serif-black"
                 android:text="AQI:59"
                 android:textColor="#FF1C1C1E"
-                android:textSize="12sp"
+                android:textSize="14sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -52,10 +53,21 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:fontFamily="sans-serif-black"
-        android:gravity="bottom"
+        android:gravity="center_vertical"
+        android:includeFontPadding="false"
+        android:letterSpacing="-0.02"
         android:text="GOOD"
         android:textColor="#FF1C1C1E"
-        android:textSize="36sp"
-        android:textStyle="bold"
-        android:letterSpacing="0.02" />
+        android:textSize="40sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_city"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-medium"
+        android:text="SEATTLE"
+        android:textColor="#FF8E8E93"
+        android:textSize="11sp"
+        android:textStyle="bold" />
 </LinearLayout>

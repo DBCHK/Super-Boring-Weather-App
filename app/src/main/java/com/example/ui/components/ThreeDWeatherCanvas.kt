@@ -92,13 +92,18 @@ fun ThreeDWeatherCanvas(
     modelScale: Float = 1.0f,
     /** Theme fill for cloud-like models; sun keeps warm gold when null-ish. */
     tintColor: Color? = null,
-    shadeColor: Color? = null
+    shadeColor: Color? = null,
+    /** Shared hero interaction — weather + digits move as one when provided. */
+    interactionState: Interactive3DState? = null,
+    /** When false, parent owns drag/tilt gestures (linked group). */
+    enableGestures: Boolean = true
 ) {
-    val interaction = rememberInteractive3DState(
+    val ownedInteraction = rememberInteractive3DState(
         initialPitch = 14f,
         autoSpinDegPerSec = 16f,
         maxPitch = 75f
     )
+    val interaction = interactionState ?: ownedInteraction
 
     val infiniteTransition = rememberInfiniteTransition(label = "3DAnimation")
 
@@ -152,7 +157,11 @@ fun ThreeDWeatherCanvas(
     }
 
     Box(
-        modifier = modifier.interactive3D(interaction, enablePitch = true),
+        modifier = if (enableGestures) {
+            modifier.interactive3D(interaction, enablePitch = true)
+        } else {
+            modifier
+        },
         contentAlignment = Alignment.Center
     ) {
         GlbModelRenderer(

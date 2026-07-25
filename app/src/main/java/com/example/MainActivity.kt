@@ -1,21 +1,32 @@
 package com.example
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -35,6 +47,8 @@ import com.example.ui.screens.MainWeatherScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.WeatherUiState
 import com.example.ui.viewmodel.WeatherViewModel
+import com.example.util.LocationHelper
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,8 +79,11 @@ fun NotBoringWeatherApp(
 
     var showDetailsScreen by remember { mutableStateOf(false) }
     var showCitySheet by remember { mutableStateOf(false) }
+    var showLocationServicesDialog by remember { mutableStateOf(false) }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    val locationHelper = remember { LocationHelper(context) }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -74,11 +91,18 @@ fun NotBoringWeatherApp(
         val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
         if (fineGranted || coarseGranted) {
-            viewModel.detectUserLocation()
+            // After permission, still check if device location is on
+            if (!locationHelper.isLocationServicesEnabled()) {
+                showLocationServicesDialog = true
+            } else {
+                scope.launch {
+                    viewModel.detectUserLocationResult()
+                }
+            }
         }
     }
 
-    val requestLocationAndDetect = {
+    val runDetect: () -> Unit = {
         val hasFine = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
@@ -86,19 +110,39 @@ fun NotBoringWeatherApp(
             context, Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
-        if (hasFine || hasCoarse) {
-            viewModel.detectUserLocation()
-        } else {
+        // 1) Device location services must be on first
+        if (!locationHelper.isLocationServicesEnabled()) {
+            showLocationServicesDialog = true
+        } else if (!(hasFine || hasCoarse)) {
+            // 2) App permission
             locationPermissionLauncher.launch(
                 arrayOf(
                     Manifest.permission.ACCESS_FINE_LOCATION,
                     Manifest.permission.ACCESS_COARSE_LOCATION
                 )
             )
+        } else {
+            // 3) Detect
+            scope.launch {
+                when (viewModel.detectUserLocationResult()) {
+                    is WeatherViewModel.LocationDetectResult.ServicesDisabled -> {
+                        showLocationServicesDialog = true
+                    }
+                    is WeatherViewModel.LocationDetectResult.PermissionRequired -> {
+                        locationPermissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                            )
+                        )
+                    }
+                    else -> Unit
+                }
+            }
         }
     }
 
-    // Auto-detect user location on launch if permission granted
+    // Auto-detect on launch only if permission + services are available
     LaunchedEffect(Unit) {
         val hasFine = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_FINE_LOCATION
@@ -106,9 +150,38 @@ fun NotBoringWeatherApp(
         val hasCoarse = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
-        if (hasFine || hasCoarse) {
-            viewModel.detectUserLocation()
+        if ((hasFine || hasCoarse) && locationHelper.isLocationServicesEnabled()) {
+            viewModel.detectUserLocationResult()
         }
+    }
+
+    if (showLocationServicesDialog) {
+        AlertDialog(
+            onDismissRequest = { showLocationServicesDialog = false },
+            title = { Text("Turn on location") },
+            text = {
+                Text(
+                    "Location is turned off on this device. Enable it in Settings so we can " +
+                        "auto-detect your city and refresh local weather."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLocationServicesDialog = false
+                        val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                        context.startActivity(intent)
+                    }
+                ) {
+                    Text("Open Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLocationServicesDialog = false }) {
+                    Text("Not now")
+                }
+            }
+        )
     }
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -117,7 +190,6 @@ fun NotBoringWeatherApp(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Main Weather Screen
             MainWeatherScreen(
                 weatherUiState = weatherUiState,
                 selectedHourIndex = selectedHourIndex,
@@ -126,15 +198,26 @@ fun NotBoringWeatherApp(
                 onToggleUnit = { viewModel.toggleTemperatureUnit() },
                 onOpenCitySheet = { showCitySheet = true },
                 onOpenDetailsCard = { showDetailsScreen = true },
-                onDetectLocation = { requestLocationAndDetect() },
+                onDetectLocation = { runDetect() },
                 onRefresh = { viewModel.refreshWeather() }
             )
 
-            // Detailed Forecast Screen Overlay
             AnimatedVisibility(
                 visible = showDetailsScreen,
-                enter = slideInVertically(initialOffsetY = { it }),
-                exit = slideOutVertically(targetOffsetY = { it }),
+                enter = slideInVertically(
+                    initialOffsetY = { full -> full },
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                ) + fadeIn(animationSpec = tween(220)),
+                exit = slideOutVertically(
+                    targetOffsetY = { full -> full },
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                ) + fadeOut(animationSpec = tween(180)),
                 modifier = Modifier
                     .fillMaxSize()
                     .zIndex(10f)
@@ -150,7 +233,6 @@ fun NotBoringWeatherApp(
                 }
             }
 
-            // City Selection Bottom Sheet
             if (showCitySheet) {
                 CitySelectionSheet(
                     sheetState = sheetState,
@@ -163,7 +245,7 @@ fun NotBoringWeatherApp(
                     onSelectCity = { viewModel.selectCity(it) },
                     onSaveCity = { viewModel.saveCity(it) },
                     onDeleteCity = { viewModel.deleteCity(it) },
-                    onDetectLocation = { requestLocationAndDetect() },
+                    onDetectLocation = { runDetect() },
                     onDismiss = {
                         viewModel.updateSearchQuery("")
                         showCitySheet = false

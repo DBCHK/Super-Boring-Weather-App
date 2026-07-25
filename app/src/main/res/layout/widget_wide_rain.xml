@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg_dark"
     android:orientation="vertical"
-    android:padding="18dp">
+    android:padding="16dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -19,9 +19,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif-black"
+            android:includeFontPadding="false"
             android:text="65°"
             android:textColor="#FFFFFFFF"
-            android:textSize="44sp"
+            android:textSize="52sp"
             android:textStyle="bold" />
 
         <LinearLayout
@@ -35,10 +36,11 @@
                 android:id="@+id/widget_city"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="monospace"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.08"
                 android:text="SEATTLE"
                 android:textColor="#FF8E8E93"
-                android:textSize="11sp"
+                android:textSize="12sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -48,23 +50,32 @@
                 android:fontFamily="sans-serif-black"
                 android:text="LIGHT RAIN"
                 android:textColor="#FFFFFFFF"
-                android:textSize="15sp"
+                android:textSize="16sp"
                 android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_meta"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="sans-serif-medium"
+                android:text="AQI 59 · UV 4"
+                android:textColor="#FF8E8E93"
+                android:textSize="11sp" />
         </LinearLayout>
 
         <ImageView
             android:id="@+id/widget_weather_icon"
-            android:layout_width="64dp"
-            android:layout_height="56dp"
+            android:layout_width="68dp"
+            android:layout_height="60dp"
             android:contentDescription="@string/widget_weather_icon_desc"
             android:src="@drawable/widget_ic_rain_cloud" />
     </LinearLayout>
 
-    <!-- High / Low capsule bar -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="36dp"
-        android:layout_marginTop="10dp"
+        android:layout_height="38dp"
+        android:layout_marginTop="8dp"
         android:background="@drawable/widget_track_dark"
         android:orientation="horizontal"
         android:weightSum="2">
@@ -75,11 +86,11 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="@drawable/widget_track_blue"
-            android:fontFamily="monospace"
+            android:fontFamily="sans-serif-black"
             android:gravity="center"
             android:text="68°"
             android:textColor="#FFFFFFFF"
-            android:textSize="13sp"
+            android:textSize="15sp"
             android:textStyle="bold" />
 
         <TextView
@@ -87,11 +98,11 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:fontFamily="monospace"
+            android:fontFamily="sans-serif-black"
             android:gravity="center"
             android:text="54°"
             android:textColor="#FFE5E5EA"
-            android:textSize="13sp"
+            android:textSize="15sp"
             android:textStyle="bold" />
     </LinearLayout>
 
@@ -105,39 +116,39 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:fontFamily="monospace"
+            android:fontFamily="sans-serif-medium"
             android:text="NOW"
             android:textColor="#FF8E8E93"
-            android:textSize="9sp" />
+            android:textSize="10sp" />
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:fontFamily="monospace"
+            android:fontFamily="sans-serif-medium"
             android:gravity="center"
             android:text="12P"
             android:textColor="#FF8E8E93"
-            android:textSize="9sp" />
+            android:textSize="10sp" />
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:fontFamily="monospace"
+            android:fontFamily="sans-serif-medium"
             android:gravity="center"
             android:text="6P"
             android:textColor="#FF8E8E93"
-            android:textSize="9sp" />
+            android:textSize="10sp" />
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:fontFamily="monospace"
+            android:fontFamily="sans-serif-medium"
             android:gravity="end"
             android:text="12A"
             android:textColor="#FF8E8E93"
-            android:textSize="9sp" />
+            android:textSize="10sp" />
     </LinearLayout>
 </LinearLayout>

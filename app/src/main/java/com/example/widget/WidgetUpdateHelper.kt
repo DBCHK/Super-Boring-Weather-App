@@ -136,6 +136,11 @@ object WidgetUpdateHelper {
         return RemoteViews(context.packageName, R.layout.widget_red_sun).apply {
             setTextViewText(R.id.widget_city, snap.cityName)
             setTextViewText(R.id.widget_temp, "${snap.displayTemp()}°")
+            setTextViewText(R.id.widget_condition, snap.conditionLabel)
+            setTextViewText(
+                R.id.widget_hi_lo,
+                "H:${snap.displayHigh()}°  L:${snap.displayLow()}°"
+            )
             setOnClickPendingIntent(R.id.widget_root, openAppIntent(context))
         }
     }
@@ -168,6 +173,7 @@ object WidgetUpdateHelper {
             setTextViewText(R.id.widget_condition, snap.conditionLabel)
             setTextViewText(R.id.widget_high, "${snap.displayHigh()}°")
             setTextViewText(R.id.widget_low, "${snap.displayLow()}°")
+            setTextViewText(R.id.widget_meta, "AQI ${snap.aqi} · ${snap.aqiLabel}")
             setImageViewResource(R.id.widget_weather_icon, conditionIcon(snap.conditionKey))
             setOnClickPendingIntent(R.id.widget_root, openAppIntent(context))
         }
@@ -177,6 +183,7 @@ object WidgetUpdateHelper {
         return RemoteViews(context.packageName, R.layout.widget_air_quality).apply {
             setTextViewText(R.id.widget_aqi_value, "AQI:${snap.aqi}")
             setTextViewText(R.id.widget_aqi_label, snap.aqiLabel)
+            setTextViewText(R.id.widget_city, snap.cityName)
             setOnClickPendingIntent(R.id.widget_root, openAppIntent(context))
         }
     }
@@ -185,6 +192,7 @@ object WidgetUpdateHelper {
         return RemoteViews(context.packageName, R.layout.widget_moon_phase).apply {
             setTextViewText(R.id.widget_moon_phase, snap.moonPhase)
             setTextViewText(R.id.widget_moon_illum, "${snap.moonIllum}%")
+            setTextViewText(R.id.widget_city, snap.cityName)
             setOnClickPendingIntent(R.id.widget_root, openAppIntent(context))
         }
     }
@@ -194,6 +202,10 @@ object WidgetUpdateHelper {
             setTextViewText(R.id.widget_temp, "${snap.displayTemp()}°")
             setTextViewText(R.id.widget_city, snap.cityName)
             setTextViewText(R.id.widget_condition, snap.conditionLabel)
+            setTextViewText(
+                R.id.widget_hi_lo,
+                "H ${snap.displayHigh()}° · L ${snap.displayLow()}°"
+            )
             setImageViewResource(R.id.widget_weather_icon, conditionIcon(snap.conditionKey))
             setOnClickPendingIntent(R.id.widget_root, openAppIntent(context))
         }

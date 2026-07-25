@@ -4,7 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Geocoder
 import android.location.Location
-import com.example.data.api.ApiClient
+import android.location.LocationManager
 import com.example.data.model.CityEntity
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -14,14 +14,48 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
+sealed class LocationResult {
+    data class Success(val city: CityEntity) : LocationResult()
+    /** App permission missing — request ACCESS_FINE/COARSE. */
+    data object PermissionRequired : LocationResult()
+    /** Device location services (GPS/network) are off — open system settings. */
+    data object ServicesDisabled : LocationResult()
+    data class Failed(val message: String) : LocationResult()
+}
+
 class LocationHelper(private val context: Context) {
 
     private val fusedLocationClient by lazy {
         LocationServices.getFusedLocationProviderClient(context)
     }
 
+    fun isLocationServicesEnabled(): Boolean {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return try {
+            lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     @SuppressLint("MissingPermission")
-    suspend fun getCurrentUserLocation(): CityEntity? = withContext(Dispatchers.IO) {
+    suspend fun getCurrentUserLocation(): CityEntity? {
+        return when (val result = resolveLocation()) {
+            is LocationResult.Success -> result.city
+            else -> null
+        }
+    }
+
+    /**
+     * Full resolution path used by UI so it can prompt for services / permission.
+     */
+    @SuppressLint("MissingPermission")
+    suspend fun resolveLocation(): LocationResult = withContext(Dispatchers.IO) {
+        if (!isLocationServicesEnabled()) {
+            return@withContext LocationResult.ServicesDisabled
+        }
+
         try {
             val cancellationTokenSource = CancellationTokenSource()
             val location: Location? = try {
@@ -29,36 +63,36 @@ class LocationHelper(private val context: Context) {
                     Priority.PRIORITY_BALANCED_POWER_ACCURACY,
                     cancellationTokenSource.token
                 ).await()
-            } catch (e: Exception) {
-                fusedLocationClient.lastLocation.await()
+            } catch (_: Exception) {
+                try {
+                    fusedLocationClient.lastLocation.await()
+                } catch (_: Exception) {
+                    null
+                }
             }
 
             if (location != null) {
                 val lat = location.latitude
                 val lon = location.longitude
                 val cityName = reverseGeocodeCity(lat, lon)
-                return@withContext CityEntity(
-                    id = "current_location_${lat}_${lon}",
-                    name = cityName,
-                    country = "Current Location",
-                    latitude = lat,
-                    longitude = lon,
-                    isDefault = true
+                return@withContext LocationResult.Success(
+                    CityEntity(
+                        id = "current_location_${lat}_${lon}",
+                        name = cityName,
+                        country = "Current Location",
+                        latitude = lat,
+                        longitude = lon,
+                        isDefault = true
+                    )
                 )
             }
+            LocationResult.Failed("Could not determine location")
+        } catch (e: SecurityException) {
+            LocationResult.PermissionRequired
         } catch (e: Exception) {
             e.printStackTrace()
+            LocationResult.Failed(e.message ?: "Location error")
         }
-
-        // Fallback: If device location unavailable, return San Francisco / detected IP location
-        return@withContext CityEntity(
-            id = "auto_sf",
-            name = "San Francisco",
-            country = "United States",
-            latitude = 37.7749,
-            longitude = -122.4194,
-            isDefault = true
-        )
     }
 
     private fun reverseGeocodeCity(lat: Double, lon: Double): String {
@@ -76,7 +110,7 @@ class LocationHelper(private val context: Context) {
             } else {
                 "My Location"
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             "My Location"
         }
     }

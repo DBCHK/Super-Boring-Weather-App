@@ -117,19 +117,46 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
         _pinnedWidgets.value = current
     }
 
+    /**
+     * Result of an auto-detect attempt so the UI can prompt for services/permission.
+     */
+    sealed class LocationDetectResult {
+        data object Success : LocationDetectResult()
+        data object ServicesDisabled : LocationDetectResult()
+        data object PermissionRequired : LocationDetectResult()
+        data class Failed(val message: String) : LocationDetectResult()
+    }
+
+    suspend fun detectUserLocationResult(): LocationDetectResult {
+        _weatherUiState.value = WeatherUiState.Loading
+        val locationHelper = com.example.util.LocationHelper(getApplication())
+        return when (val result = locationHelper.resolveLocation()) {
+            is com.example.util.LocationResult.Success -> {
+                _selectedCity.value = result.city
+                _selectedHourIndex.value = 0
+                repository.saveCity(result.city)
+                loadWeatherForCity(result.city)
+                LocationDetectResult.Success
+            }
+            is com.example.util.LocationResult.ServicesDisabled -> {
+                // Stay on previous city weather, not SF fallback
+                loadWeatherForSelectedCity()
+                LocationDetectResult.ServicesDisabled
+            }
+            is com.example.util.LocationResult.PermissionRequired -> {
+                loadWeatherForSelectedCity()
+                LocationDetectResult.PermissionRequired
+            }
+            is com.example.util.LocationResult.Failed -> {
+                loadWeatherForSelectedCity()
+                LocationDetectResult.Failed(result.message)
+            }
+        }
+    }
+
     fun detectUserLocation() {
         viewModelScope.launch {
-            _weatherUiState.value = WeatherUiState.Loading
-            val locationHelper = com.example.util.LocationHelper(getApplication())
-            val detectedCity = locationHelper.getCurrentUserLocation()
-            if (detectedCity != null) {
-                _selectedCity.value = detectedCity
-                _selectedHourIndex.value = 0
-                repository.saveCity(detectedCity)
-                loadWeatherForCity(detectedCity)
-            } else {
-                loadWeatherForSelectedCity()
-            }
+            detectUserLocationResult()
         }
     }
 

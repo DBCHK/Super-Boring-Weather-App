@@ -6,9 +6,13 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -37,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,9 +55,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.DailyForecast
@@ -98,30 +107,108 @@ fun DetailedForecastScreen(
     val playFeedback = feedback.tap
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(pageCount = { DetailTabs.size })
+    val density = LocalDensity.current
+    // Interactive dismiss: drag sheet down, spring back or close
+    val dismissOffset = remember { Animatable(0f) }
+    val dismissThresholdPx = with(density) { 140.dp.toPx() }
 
     // Keep chip selection in sync with swipe
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.currentPage }
             .distinctUntilChanged()
-            .collect { page ->
+            .collect {
                 feedback.tick()
             }
     }
 
     Surface(
-        modifier = modifier.fillMaxSize(),
-        color = Color(0xFFF2F2F7)
+        modifier = modifier
+            .fillMaxSize()
+            .offset { IntOffset(0, dismissOffset.value.roundToInt()) }
+            .graphicsLayer {
+                // Fade/scale slightly as user drags down for smooth home reveal
+                val t = (dismissOffset.value / (dismissThresholdPx * 2.2f)).coerceIn(0f, 1f)
+                alpha = 1f - t * 0.35f
+                scaleX = 1f - t * 0.04f
+                scaleY = 1f - t * 0.04f
+            },
+        color = Color(0xFFF2F2F7),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 12.dp)
+                .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
+            // Drag handle — swipe down to return home
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragEnd = {
+                                scope.launch {
+                                    if (dismissOffset.value > dismissThresholdPx) {
+                                        feedback.splash()
+                                        dismissOffset.animateTo(
+                                            targetValue = size.height.toFloat(),
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                                stiffness = Spring.StiffnessMedium
+                                            )
+                                        )
+                                        onClose()
+                                    } else {
+                                        dismissOffset.animateTo(
+                                            0f,
+                                            spring(
+                                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                stiffness = Spring.StiffnessMediumLow
+                                            )
+                                        )
+                                    }
+                                }
+                            },
+                            onDragCancel = {
+                                scope.launch {
+                                    dismissOffset.animateTo(0f, spring())
+                                }
+                            },
+                            onVerticalDrag = { change, dragAmount ->
+                                change.consume()
+                                scope.launch {
+                                    val next = (dismissOffset.value + dragAmount).coerceAtLeast(0f)
+                                    dismissOffset.snapTo(next)
+                                }
+                            }
+                        )
+                    }
+                    .padding(top = 6.dp, bottom = 4.dp)
+                    .testTag("details_drag_handle")
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(44.dp)
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(Color(0xFFD1D1D6))
+                )
+                Text(
+                    text = "SWIPE DOWN FOR HOME",
+                    fontSize = 9.sp,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.sp,
+                    color = Color(0xFFAEAEB2),
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+
             // Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 12.dp, bottom = 8.dp),
+                    .padding(top = 4.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {

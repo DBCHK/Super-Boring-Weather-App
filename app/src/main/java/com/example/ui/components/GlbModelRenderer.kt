@@ -56,8 +56,8 @@ fun GlbModelRenderer(
         view.bloomOptions = view.bloomOptions.apply { enabled = false }
     }
 
-    // Re-tint whenever theme colors or model change
-    LaunchedEffect(modelInstance, tintColor, shadeColor) {
+    // Re-tint only when theme or asset path changes — never every rotation frame
+    LaunchedEffect(modelPath, tintColor, shadeColor, modelInstance) {
         modelInstance?.applyThemeTint(tintColor, shadeColor)
     }
 
@@ -98,10 +98,7 @@ fun GlbModelRenderer(
                     x = interactionState.renderPitch,
                     y = interactionState.renderYaw,
                     z = 0f
-                ),
-                apply = {
-                    instance.applyThemeTint(tintColor, shadeColor)
-                }
+                )
             )
         }
     }

@@ -4,8 +4,16 @@ import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,13 +45,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -56,6 +68,7 @@ import com.example.ui.components.ThreeDWeatherCanvas
 import com.example.ui.components.TimelineScrubber
 import com.example.ui.components.WeatherBackgroundShaderCanvas
 import com.example.ui.components.WeatherFooter
+import com.example.ui.components.interactive3D
 import com.example.ui.components.rememberInteractive3DState
 import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.ThemePalette
@@ -79,7 +92,8 @@ fun MainWeatherScreen(
     onOpenDetailsCard: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var themeMode by remember { mutableIntStateOf(0) } // 0 Light, 1 Yellow, 2 Dark
+    // Default: vibrant yellow theme (matches Not Boring home reference)
+    var themeMode by remember { mutableIntStateOf(1) } // 0 Light, 1 Yellow, 2 Dark
     val appTheme = when (themeMode) {
         1 -> AppThemeMode.YELLOW
         2 -> AppThemeMode.DARK
@@ -93,7 +107,39 @@ fun MainWeatherScreen(
         modifier = modifier.fillMaxSize(),
         color = backgroundColor
     ) {
-        when (weatherUiState) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Vignette behind content (yellow = stronger, light = slight; dark = none)
+            if (themeMode == 0 || themeMode == 1) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val edge = if (themeMode == 1) {
+                        listOf(
+                            Color.Transparent,
+                            Color(0xFF8B5A00).copy(alpha = 0.20f),
+                            Color(0xFF3D2200).copy(alpha = 0.48f)
+                        )
+                    } else {
+                        listOf(
+                            Color.Transparent,
+                            Color(0xFF8E8E93).copy(alpha = 0.07f),
+                            Color(0xFF1C1C1E).copy(alpha = 0.14f)
+                        )
+                    }
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colorStops = arrayOf(
+                                0.0f to edge[0],
+                                0.52f to edge[0],
+                                0.80f to edge[1],
+                                1.0f to edge[2]
+                            ),
+                            center = center,
+                            radius = size.maxDimension * 0.74f
+                        )
+                    )
+                }
+            }
+
+            when (weatherUiState) {
             is WeatherUiState.Loading -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -190,8 +236,43 @@ fun MainWeatherScreen(
 
                 val (playFeedback, _) = rememberDropletFeedback()
                 val scrollState = rememberScrollState()
+                var swipeUpAccum by remember { mutableFloatStateOf(0f) }
 
-                Box(modifier = Modifier.fillMaxSize()) {
+                // Subtle bounce on the "swipe up" chevron
+                val chevronBob by rememberInfiniteTransition(label = "chevron").animateFloat(
+                    initialValue = 0f,
+                    targetValue = -8f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(900, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "chevronBob"
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // Swipe up anywhere on home to open details (creative sheet gesture)
+                        .pointerInput(Unit) {
+                            detectVerticalDragGestures(
+                                onDragEnd = {
+                                    if (swipeUpAccum < -110f) {
+                                        playFeedback()
+                                        onOpenDetailsCard()
+                                    }
+                                    swipeUpAccum = 0f
+                                },
+                                onDragCancel = { swipeUpAccum = 0f },
+                                onVerticalDrag = { change, dragAmount ->
+                                    // Prefer upward gestures; ignore small noise
+                                    if (dragAmount < 0f || swipeUpAccum < 0f) {
+                                        swipeUpAccum += dragAmount
+                                        change.consume()
+                                    }
+                                }
+                            )
+                        }
+                ) {
                     // Background Particle Shader Canvas Layer behind giant typography
                     WeatherBackgroundShaderCanvas(
                         condition = condition,
@@ -208,7 +289,7 @@ fun MainWeatherScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(scrollState)
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Top
                     ) {
@@ -341,18 +422,18 @@ fun MainWeatherScreen(
                                 }
                             }
 
-                            // Yellow theme: hero quote + rotating humorous lines
+                            // Hero quote — reference scale & airy spacing (yellow theme)
                             if (themeMode == 1) {
                                 val yellowQuotes = remember {
                                     listOf(
-                                        "LIFE'S TOO SHORT TO WASTE TIME ON BORING APPS",
-                                        "UMBRELLA? THAT'S CUTE. THE CLOUDS SAID NO.",
-                                        "WEATHER SO EXTRA IT NEEDS A PUBLICIST",
-                                        "SUN'S OUT. EXCUSES ARE CANCELLED.",
-                                        "IF RAIN HAD A PERSONALITY, IT'D BE PETTY",
-                                        "HOT TAKE: IT'S LITERALLY HOT",
-                                        "CLOUDS DOING THE MOST. AGAIN.",
-                                        "FORECAST: 100% CHANCE OF CHAOS"
+                                        "Life's too short to\nwaste on boring apps.",
+                                        "Umbrella? That's cute.\nThe clouds said no.",
+                                        "Weather so extra\nit needs a publicist.",
+                                        "Sun's out.\nExcuses are cancelled.",
+                                        "If rain had a personality,\nit'd be petty.",
+                                        "Hot take:\nit's literally hot.",
+                                        "Clouds doing the most.\nAgain.",
+                                        "Forecast: 100%\nchance of chaos."
                                     )
                                 }
                                 var quoteIndex by remember { mutableIntStateOf(0) }
@@ -363,76 +444,91 @@ fun MainWeatherScreen(
                                         quoteIndex = (quoteIndex + 1) % yellowQuotes.size
                                     }
                                 }
-                                Spacer(modifier = Modifier.height(10.dp))
+                                Spacer(modifier = Modifier.height(28.dp))
                                 Text(
                                     text = yellowQuotes[quoteIndex],
-                                    fontSize = 15.sp,
+                                    fontSize = 28.sp,
                                     fontWeight = FontWeight.Black,
                                     fontFamily = FontFamily.SansSerif,
                                     textAlign = TextAlign.Center,
                                     color = Color(0xFF1C1C1E),
-                                    letterSpacing = 0.3.sp,
-                                    lineHeight = 20.sp,
-                                    modifier = Modifier.padding(horizontal = 18.dp)
+                                    letterSpacing = (-0.4).sp,
+                                    lineHeight = 34.sp,
+                                    modifier = Modifier.padding(horizontal = 12.dp)
                                 )
+                            } else {
+                                Spacer(modifier = Modifier.height(20.dp))
                             }
                         }
 
-                        // Hero 3D Weather + Temperature — slightly larger models over digits
+                        // Hero group: weather + digits share ONE interaction (drag / tilt / auto-spin)
+                        Spacer(modifier = Modifier.height(if (themeMode == 1) 36.dp else 28.dp))
+
+                        // Pitch allowed on Y-drag / tilt, but hard-capped (<90°) so never upside-down
+                        val heroInteraction = rememberInteractive3DState(
+                            initialPitch = 12f,
+                            initialYaw = 0f,
+                            maxPitch = 52f,
+                            maxYaw = 36f,
+                            autoSpinDegPerSec = 9f,
+                            autoSpinOscillate = true
+                        )
+
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy((-16).dp),
-                            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .interactive3D(
+                                    heroInteraction,
+                                    enablePitch = true, // vertical drag → pitch (Y axis motion)
+                                    enableDeviceTilt = true
+                                )
                         ) {
-                            Box(
+                            ThreeDWeatherCanvas(
+                                condition = condition,
+                                isDaytime = currentHourly?.isDaytime ?: true,
+                                modelScale = 2.15f,
+                                tintColor = if (palette.isDark) Color(0xFFF2F2F7) else Color(0xFF2C2C2E),
+                                shadeColor = if (palette.isDark) Color(0xFFC7C7CC) else Color(0xFF636366),
+                                interactionState = heroInteraction,
+                                enableGestures = false,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(240.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                ThreeDWeatherCanvas(
-                                    condition = condition,
-                                    isDaytime = currentHourly?.isDaytime ?: true,
-                                    modelScale = 1.85f,
-                                    // Clouds/etc follow theme; sun stays gold inside canvas
-                                    tintColor = if (palette.isDark) Color(0xFFF2F2F7) else Color(0xFF2C2C2E),
-                                    shadeColor = if (palette.isDark) Color(0xFFC7C7CC) else Color(0xFF636366),
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-
-                            val tempInteraction = rememberInteractive3DState(
-                                initialPitch = 0f,
-                                initialYaw = 0f,
-                                maxPitch = 0f,
-                                maxYaw = 38f, // never flip past readable range
-                                autoSpinDegPerSec = 12f,
-                                autoSpinOscillate = true // left ↔ right, not full 360°
+                                    .height(200.dp)
                             )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
                             ThreeDDigitsRow(
                                 number = displayedTemp,
-                                interactionState = tempInteraction,
-                                scaleToUnits = 1.55f,
-                                spacing = 1.05f,
+                                interactionState = heroInteraction,
+                                scaleToUnits = 2.20f,
+                                spacing = 1.08f,
                                 fillColor = palette.elementFill,
                                 shadeColor = palette.elementShade,
                                 shadowColor = palette.elementShadow,
                                 highlightColor = palette.elementHighlight,
+                                enableGestures = false,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(150.dp)
-                            )
-
-                            Text(
-                                text = condition.label,
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Black,
-                                fontFamily = FontFamily.SansSerif,
-                                letterSpacing = 2.sp,
-                                color = primaryTextColor,
-                                modifier = Modifier.padding(top = 4.dp)
+                                    .height(200.dp)
                             )
                         }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Text(
+                            text = condition.label.lowercase()
+                                .replaceFirstChar { it.titlecase() },
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = FontFamily.SansSerif,
+                            letterSpacing = 0.2.sp,
+                            color = primaryTextColor,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         // Timeline Scrubber Bar
                         TimelineScrubber(
@@ -448,35 +544,46 @@ fun MainWeatherScreen(
                             activeColor = palette.scrubberActive,
                             labelColor = palette.secondaryText,
                             modifier = Modifier
-                                .padding(vertical = 16.dp)
+                                .padding(vertical = 8.dp)
                                 .testTag("timeline_scrubber")
                         )
 
-                        // Pull / Click for Detailed Cards Button
-                        Row(
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        // Swipe-up affordance (creative sheet cue)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
+                                .clip(RoundedCornerShape(20.dp))
                                 .clickable {
                                     playFeedback()
                                     onOpenDetailsCard()
                                 }
-                                .padding(horizontal = 16.dp, vertical = 12.dp)
-                                .testTag("detailed_forecast_button"),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                .padding(horizontal = 20.dp, vertical = 14.dp)
+                                .testTag("detailed_forecast_button")
                         ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(40.dp)
+                                    .height(4.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(palette.secondaryText.copy(alpha = 0.35f))
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowUp,
-                                contentDescription = "Expand",
+                                contentDescription = "Swipe up for details",
                                 tint = palette.secondaryText,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier
+                                    .size(22.dp)
+                                    .graphicsLayer { translationY = chevronBob }
                             )
                             Text(
-                                text = "DETAILED FORECASTS",
+                                text = "SWIPE UP FOR DETAILS",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace,
-                                letterSpacing = 1.sp,
+                                letterSpacing = 1.2.sp,
                                 color = palette.secondaryText
                             )
                         }
@@ -487,6 +594,7 @@ fun MainWeatherScreen(
                     }
                 }
             }
-        }
-    }
+            } // when
+        } // Box
+    } // Surface
 }

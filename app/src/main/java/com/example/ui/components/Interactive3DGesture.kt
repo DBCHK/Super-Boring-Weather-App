@@ -84,9 +84,11 @@ class Interactive3DState(
         return value.coerceIn(-limit, limit)
     }
 
-    /** Pitch used for rendering: drag/auto + gentle device tilt. */
+    fun clampPitch(value: Float): Float = value.coerceIn(-maxPitch, maxPitch)
+
+    /** Pitch used for rendering: drag + device tilt, hard-clamped so models never flip fully. */
     val renderPitch: Float
-        get() = pitch.coerceIn(-maxPitch, maxPitch) + devicePitchOffset
+        get() = clampPitch(pitch + devicePitchOffset)
 
     /** Yaw used for rendering: drag/auto + gentle device tilt (clamped when maxYaw set). */
     val renderYaw: Float
@@ -134,7 +136,7 @@ fun Modifier.interactive3D(
     val scope = rememberCoroutineScope()
     val sensorContext = LocalContext.current
 
-    // Gentle hologram tilt from phone motion
+    // Gentle hologram tilt — warm-up + heavy smoothing prevents idle "snap" jumps
     if (enableDeviceTilt) {
         DisposableEffect(state, enablePitch) {
             val sensorManager =
@@ -145,35 +147,59 @@ fun Modifier.interactive3D(
             if (sensor == null) {
                 onDispose { }
             } else {
-                // Soft low-pass + small angle caps so motion feels floaty, not twitchy
                 var fx = 0f
                 var fy = 9.81f
                 var fz = 0f
-                val smooth = 0.10f
-                // More readable hologram range — still smooth, clearly visible on tilt
-                val maxDeviceYaw = 22f
-                val maxDevicePitch = if (enablePitch) 16f else 10f
+                var seeded = false
+                var warmFrames = 0
+                // Heavier smoothing = less idle noise / sudden shifts
+                val smooth = 0.06f
+                val outputSmooth = 0.12f
+                val maxDeviceYaw = 18f
+                // Device pitch stays within overall maxPitch so combined tilt can't go upside-down
+                val maxDevicePitch = if (enablePitch) {
+                    (state.maxPitch * 0.55f).coerceIn(10f, 28f)
+                } else {
+                    8f
+                }
+                var outYaw = 0f
+                var outPitch = 0f
 
                 val listener = object : SensorEventListener {
                     override fun onSensorChanged(event: SensorEvent) {
                         val x = event.values[0]
                         val y = event.values[1]
                         val z = event.values[2]
+                        if (!seeded) {
+                            fx = x; fy = y; fz = z
+                            seeded = true
+                            return
+                        }
                         fx = smooth * x + (1f - smooth) * fx
                         fy = smooth * y + (1f - smooth) * fy
                         fz = smooth * z + (1f - smooth) * fz
 
                         val horizontal = sqrt(fx * fx + fy * fy).coerceAtLeast(0.01f)
-                        // Left/right phone tilt → yaw
                         val tiltLR = Math.toDegrees(atan2(fx.toDouble(), fy.toDouble())).toFloat()
-                        // Forward/back phone tilt → pitch
                         val tiltFB =
                             Math.toDegrees(atan2((-fz).toDouble(), horizontal.toDouble())).toFloat()
 
-                        state.deviceYawOffset =
-                            (-tiltLR * 0.62f).coerceIn(-maxDeviceYaw, maxDeviceYaw)
-                        state.devicePitchOffset =
-                            (tiltFB * 0.50f).coerceIn(-maxDevicePitch, maxDevicePitch)
+                        val targetYaw = (-tiltLR * 0.48f).coerceIn(-maxDeviceYaw, maxDeviceYaw)
+                        val targetPitch = (tiltFB * 0.45f).coerceIn(-maxDevicePitch, maxDevicePitch)
+
+                        // Warm-up: ignore first ~12 samples so first real reading doesn't snap
+                        warmFrames++
+                        if (warmFrames < 12) {
+                            outYaw = targetYaw
+                            outPitch = targetPitch
+                            return
+                        }
+
+                        outYaw += (targetYaw - outYaw) * outputSmooth
+                        outPitch += (targetPitch - outPitch) * outputSmooth
+                        state.deviceYawOffset = outYaw
+                        // Keep device pitch inside absolute pitch budget
+                        state.devicePitchOffset = outPitch.coerceIn(-state.maxPitch, state.maxPitch)
                     }
 
                     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
@@ -182,12 +208,11 @@ fun Modifier.interactive3D(
                 sensorManager.registerListener(
                     listener,
                     sensor,
-                    SensorManager.SENSOR_DELAY_GAME
+                    SensorManager.SENSOR_DELAY_UI // calmer than GAME — less idle jitter
                 )
                 onDispose {
                     sensorManager.unregisterListener(listener)
-                    state.devicePitchOffset = 0f
-                    state.deviceYawOffset = 0f
+                    // Don't hard-zero (causes visible jump); leave last value
                 }
             }
         }
@@ -198,10 +223,12 @@ fun Modifier.interactive3D(
         if (state.isDragging) return@LaunchedEffect
 
         var lastFrame = 0L
-        // Convert approx per-frame deltas → deg/sec for frame-rate independence
         var velocityYaw = state.velYaw * 55f
         var velocityPitch = state.velPitch * 55f
-        var autoSpinBlend = 0f // 0..1 ease-in of auto-spin after release
+        // Longer ease-in so idle doesn't "kick" after ~1s
+        var autoSpinBlend = 0f
+        // Continuous phase for smooth oscillation (no hard reverse at maxYaw)
+        var oscillatePhase = 0f
 
         while (true) {
             withFrameMillis { frameTime ->
@@ -209,42 +236,46 @@ fun Modifier.interactive3D(
                     lastFrame = frameTime
                     return@withFrameMillis
                 }
-                val dt = ((frameTime - lastFrame) / 1000f).coerceIn(0.001f, 0.05f)
+                val dt = ((frameTime - lastFrame) / 1000f).coerceIn(0.001f, 0.033f)
                 lastFrame = frameTime
 
-                // Exponential friction (ease-out momentum)
-                val friction = exp(-3.4f * dt)
+                val friction = exp(-3.8f * dt)
                 velocityYaw *= friction
                 velocityPitch *= friction
 
-                // Ease-in auto-spin over ~650ms after release
-                autoSpinBlend = (autoSpinBlend + dt / 0.65f).coerceIn(0f, 1f)
+                // ~1.4s ease-in — avoids sudden mid-idle spin kick
+                autoSpinBlend = (autoSpinBlend + dt / 1.4f).coerceIn(0f, 1f)
                 val easedAuto = FastOutSlowInEasing.transform(autoSpinBlend)
-                val autoSpinBase = state.autoSpinDegPerSec * easedAuto *
-                    if (state.autoSpinOscillate) state.autoSpinSign else 1f
 
-                // Soften auto-spin while residual momentum is still high
-                val momentumMag = abs(velocityYaw)
-                val autoContribution = if (momentumMag > 35f) {
-                    autoSpinBase * (1f - ((momentumMag - 35f) / 100f).coerceIn(0f, 1f))
-                } else {
-                    autoSpinBase
-                }
-
-                var nextYaw = state.yaw + (velocityYaw + autoContribution) * dt
                 val yawLimit = state.maxYaw
-                if (yawLimit != null) {
-                    if (nextYaw > yawLimit) {
-                        nextYaw = yawLimit
-                        velocityYaw = 0f
-                        if (state.autoSpinOscillate) state.autoSpinSign = -1f
-                    } else if (nextYaw < -yawLimit) {
-                        nextYaw = -yawLimit
-                        velocityYaw = 0f
-                        if (state.autoSpinOscillate) state.autoSpinSign = 1f
+                if (state.autoSpinOscillate && yawLimit != null && state.autoSpinDegPerSec != 0f) {
+                    // Smooth sine oscillation between ±maxYaw (no hard bounce snap)
+                    val phaseSpeed =
+                        (state.autoSpinDegPerSec / yawLimit.coerceAtLeast(1f)) * 0.55f
+                    oscillatePhase += phaseSpeed * dt * easedAuto
+                    val target = kotlin.math.sin(oscillatePhase) * yawLimit
+                    // Blend free yaw (from drag residual) toward sine target
+                    val momentumMag = abs(velocityYaw)
+                    if (momentumMag < 8f) {
+                        state.yaw += (target - state.yaw) * (2.2f * dt).coerceIn(0f, 1f)
+                    } else {
+                        state.yaw = state.clampYaw(state.yaw + velocityYaw * dt)
                     }
+                } else {
+                    val autoSpinBase = state.autoSpinDegPerSec * easedAuto
+                    val momentumMag = abs(velocityYaw)
+                    val autoContribution = if (momentumMag > 35f) {
+                        autoSpinBase * (1f - ((momentumMag - 35f) / 100f).coerceIn(0f, 1f))
+                    } else {
+                        autoSpinBase
+                    }
+                    var nextYaw = state.yaw + (velocityYaw + autoContribution) * dt
+                    if (yawLimit != null) {
+                        nextYaw = nextYaw.coerceIn(-yawLimit, yawLimit)
+                        if (nextYaw == yawLimit || nextYaw == -yawLimit) velocityYaw = 0f
+                    }
+                    state.yaw = nextYaw
                 }
-                state.yaw = nextYaw
 
                 if (enablePitch) {
                     state.pitch = (state.pitch - velocityPitch * dt)
