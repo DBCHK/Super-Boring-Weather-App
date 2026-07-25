@@ -41,7 +41,12 @@ fun ThreeDDigitsRow(
     shadowColor: Color = Color(0xFFAEAEB2),
     highlightColor: Color = Color(0xFF636366),
     /** When false, parent owns drag/tilt so weather + digits move together. */
-    enableGestures: Boolean = true
+    enableGestures: Boolean = true,
+    /**
+     * When false, digits stay fixed in local space; parent stick layer provides the motion
+     * (digits sit at the bottom of the stick, weather at the top).
+     */
+    applyInteractionRotation: Boolean = true
 ) {
     val engine = rememberEngine()
     val modelLoader = rememberModelLoader(engine)
@@ -77,9 +82,9 @@ fun ThreeDDigitsRow(
         }
     }
 
-    // Shared rotation with weather hero — full linked pitch + yaw (pitch already clamped)
-    val yaw = interactionState.renderYaw
-    val pitch = interactionState.renderPitch
+    // Local model rotation — zero when parent owns rigid stick transform
+    val yaw = if (applyInteractionRotation) interactionState.renderYaw else 0f
+    val pitch = if (applyInteractionRotation) interactionState.renderPitch else 0f
 
     Box(
         modifier = if (enableGestures) {

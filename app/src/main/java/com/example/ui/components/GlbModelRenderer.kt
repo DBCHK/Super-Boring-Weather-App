@@ -34,7 +34,12 @@ fun GlbModelRenderer(
     tintColor: Color = Color(0xFF1C1C1E),
     shadeColor: Color = Color(0xFF3A3A3C),
     /** When true, add directional lights so models show depth/shading. */
-    enableLighting: Boolean = true
+    enableLighting: Boolean = true,
+    /**
+     * When false, model stays fixed relative to its parent (parent owns stick / layer rotation).
+     * Avoids double-applying pitch/yaw on linked hero groups.
+     */
+    applyInteractionRotation: Boolean = true
 ) {
     val engine = rememberEngine()
     val modelLoader = rememberModelLoader(engine)
@@ -90,13 +95,15 @@ fun GlbModelRenderer(
         }
 
         modelInstance?.let { instance ->
+            val rotX = if (applyInteractionRotation) interactionState.renderPitch else 0f
+            val rotY = if (applyInteractionRotation) interactionState.renderYaw else 0f
             ModelNode(
                 modelInstance = instance,
                 scaleToUnits = scaleToUnits,
                 position = Position(y = offsetY),
                 rotation = Rotation(
-                    x = interactionState.renderPitch,
-                    y = interactionState.renderYaw,
+                    x = rotX,
+                    y = rotY,
                     z = 0f
                 )
             )

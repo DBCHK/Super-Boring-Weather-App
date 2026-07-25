@@ -54,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -461,7 +462,8 @@ fun MainWeatherScreen(
                             }
                         }
 
-                        // Hero group: weather + digits share ONE interaction (drag / tilt / auto-spin)
+                        // Hero stick: weather on TOP, digits at BOTTOM of one rigid stick.
+                        // Shared pivot mid-column → pitch tips ends opposite ways; yaw swings as one body.
                         Spacer(modifier = Modifier.height(if (themeMode == 1) 36.dp else 28.dp))
 
                         // Pitch allowed on Y-drag / tilt, but hard-capped (<90°) so never upside-down
@@ -480,8 +482,12 @@ fun MainWeatherScreen(
                                 .fillMaxWidth()
                                 .interactive3D(
                                     heroInteraction,
-                                    enablePitch = true, // vertical drag → pitch (Y axis motion)
-                                    enableDeviceTilt = true
+                                    enablePitch = true, // vertical drag → stick pitch
+                                    enableDeviceTilt = true,
+                                    // Parent owns the stick transform; children stay local-upright
+                                    applyLayerRotation = true,
+                                    // Pivot between weather (top ~200dp) and digits (bottom ~200dp)
+                                    layerTransformOrigin = TransformOrigin(0.5f, 0.5f)
                                 )
                         ) {
                             ThreeDWeatherCanvas(
@@ -492,6 +498,7 @@ fun MainWeatherScreen(
                                 shadeColor = if (palette.isDark) Color(0xFFC7C7CC) else Color(0xFF636366),
                                 interactionState = heroInteraction,
                                 enableGestures = false,
+                                applyInteractionRotation = false,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(200.dp)
@@ -509,6 +516,7 @@ fun MainWeatherScreen(
                                 shadowColor = palette.elementShadow,
                                 highlightColor = palette.elementHighlight,
                                 enableGestures = false,
+                                applyInteractionRotation = false,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(200.dp)

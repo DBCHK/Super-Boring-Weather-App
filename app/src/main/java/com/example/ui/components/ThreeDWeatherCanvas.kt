@@ -96,7 +96,12 @@ fun ThreeDWeatherCanvas(
     /** Shared hero interaction — weather + digits move as one when provided. */
     interactionState: Interactive3DState? = null,
     /** When false, parent owns drag/tilt gestures (linked group). */
-    enableGestures: Boolean = true
+    enableGestures: Boolean = true,
+    /**
+     * When false, model stays upright in local space; parent layer provides stick rotation
+     * (weather at top of stick, digits at bottom — one rigid body).
+     */
+    applyInteractionRotation: Boolean = true
 ) {
     val ownedInteraction = rememberInteractive3DState(
         initialPitch = 14f,
@@ -127,9 +132,9 @@ fun ThreeDWeatherCanvas(
         label = "pulseProgress"
     )
 
-    // Read animated rotation each frame (includes gentle device-tilt hologram)
-    val currentRotX = interaction.renderPitch
-    val currentRotY = interaction.renderYaw
+    // Local model/overlay rotation — zero when parent owns rigid stick transform
+    val currentRotX = if (applyInteractionRotation) interaction.renderPitch else 0f
+    val currentRotY = if (applyInteractionRotation) interaction.renderYaw else 0f
 
     val modelPath = when (condition) {
         WeatherCondition.SUNNY -> "models/sun.glb"
@@ -171,6 +176,7 @@ fun ThreeDWeatherCanvas(
             scaleToUnits = modelScale,
             tintColor = resolvedFill,
             shadeColor = resolvedShade,
+            applyInteractionRotation = applyInteractionRotation,
             modifier = Modifier.fillMaxSize()
         )
 

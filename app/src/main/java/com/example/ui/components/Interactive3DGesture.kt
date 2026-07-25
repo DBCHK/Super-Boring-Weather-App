@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -118,17 +119,24 @@ fun rememberInteractive3DState(
 
 /**
  * Modifier that:
- *  - rotates the composable on drag (fluid, 1:1 feel)
- *  - eases out momentum after release
- *  - eases in to a gentle continuous auto-spin
+ *  - tracks drag / momentum / auto-spin / device tilt on [state]
  *  - soft press scale bounce on touch
- *  - subtle device-tilt hologram parallax (not aggressive)
+ *  - optional [applyLayerRotation]: applies pitch/yaw as a single Compose 2.5D transform
+ *    so children (e.g. weather on top, digits at bottom) move like ends of a rigid stick
+ *    around [layerTransformOrigin]
  */
 fun Modifier.interactive3D(
     state: Interactive3DState,
     enablePitch: Boolean = true,
     playSound: Boolean = true,
-    enableDeviceTilt: Boolean = true
+    enableDeviceTilt: Boolean = true,
+    /**
+     * When true, pitch/yaw drive this layer's rotationX/Y (shared pivot for linked children).
+     * Child models should then disable their own interaction rotation to avoid double-spin.
+     */
+    applyLayerRotation: Boolean = false,
+    /** Pivot for stick motion — typically mid-column between weather (top) and digits (bottom). */
+    layerTransformOrigin: TransformOrigin = TransformOrigin.Center
 ): Modifier = composed {
     val view = LocalView.current
     val context = view.context.applicationContext
@@ -285,14 +293,28 @@ fun Modifier.interactive3D(
         }
     }
 
-    // Read Animatable in composition so press-scale changes recompose
+    // Read state in composition so press-scale / stick rotation recompose
     val pressScale = state.pressScale.value
+    // Subscribe pitch/yaw when drawing as a rigid stick layer
+    val stickPitch = if (applyLayerRotation) state.renderPitch else 0f
+    val stickYaw = if (applyLayerRotation) state.renderYaw else 0f
 
     this
         .graphicsLayer {
             scaleX = pressScale
             scaleY = pressScale
-            cameraDistance = 14f * density
+            // Stick kinematics: one pivot for the whole hero column.
+            // Pitch tips top (weather) and bottom (digits) in opposite screen arcs;
+            // yaw swings the stick left/right as a single rigid body.
+            if (applyLayerRotation) {
+                rotationX = stickPitch
+                rotationY = stickYaw
+                transformOrigin = layerTransformOrigin
+                // Deeper camera so the stick foreshortens instead of flattening
+                cameraDistance = 22f * density
+            } else {
+                cameraDistance = 14f * density
+            }
         }
         .pointerInput(state, enablePitch) {
             detectTapGestures(
