@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:allowBackup="true"
@@ -16,6 +17,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyApplication">
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -23,10 +25,93 @@
             android:theme="@style/Theme.MyApplication">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 2×2 Red sun orb -->
+        <receiver
+            android:name=".widget.providers.RedSunWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_red_sun_desc">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_red_sun_info" />
+        </receiver>
+
+        <!-- 2×2 Three-day forecast -->
+        <receiver
+            android:name=".widget.providers.ThreeDayWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_three_day_desc">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_three_day_info" />
+        </receiver>
+
+        <!-- 4×2 Wide rain / timeline banner -->
+        <receiver
+            android:name=".widget.providers.WideRainWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_wide_rain_desc">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_wide_rain_info" />
+        </receiver>
+
+        <!-- 2×2 Air quality -->
+        <receiver
+            android:name=".widget.providers.AirQualityWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_air_quality_desc">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_air_quality_info" />
+        </receiver>
+
+        <!-- 2×2 Moon phase -->
+        <receiver
+            android:name=".widget.providers.MoonPhaseWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_moon_desc">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_moon_phase_info" />
+        </receiver>
+
+        <!-- 2×2 Compact rain -->
+        <receiver
+            android:name=".widget.providers.CompactRainWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_compact_rain_desc">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_compact_rain_info" />
+        </receiver>
     </application>
 
 </manifest>

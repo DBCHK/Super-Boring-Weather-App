@@ -89,7 +89,10 @@ fun ThreeDWeatherCanvas(
     condition: WeatherCondition,
     isDaytime: Boolean = true,
     modifier: Modifier = Modifier,
-    modelScale: Float = 1.0f
+    modelScale: Float = 1.0f,
+    /** Theme fill for cloud-like models; sun keeps warm gold when null-ish. */
+    tintColor: Color? = null,
+    shadeColor: Color? = null
 ) {
     val interaction = rememberInteractive3DState(
         initialPitch = 14f,
@@ -132,6 +135,22 @@ fun ThreeDWeatherCanvas(
         else -> "models/cloud.glb"
     }
 
+    // Theme-aware tints: keep sun/lightning warm; clouds/snow follow theme for contrast
+    val isSunOrBolt = condition == WeatherCondition.SUNNY ||
+        (condition == WeatherCondition.CLEAR && isDaytime) ||
+        condition == WeatherCondition.THUNDERSTORM
+    val resolvedFill = when {
+        isSunOrBolt -> Color(0xFFFFD54F)
+        condition == WeatherCondition.SNOWY -> Color(0xFFF5F5F7)
+        tintColor != null -> tintColor
+        else -> Color(0xFFE5E5EA)
+    }
+    val resolvedShade = when {
+        isSunOrBolt -> Color(0xFFFF8C00)
+        shadeColor != null -> shadeColor
+        else -> Color(0xFF8E8E93)
+    }
+
     Box(
         modifier = modifier.interactive3D(interaction, enablePitch = true),
         contentAlignment = Alignment.Center
@@ -141,6 +160,8 @@ fun ThreeDWeatherCanvas(
             interactionState = interaction,
             offsetY = bobbingY / 30f, // Scaling pixels to SceneView units
             scaleToUnits = modelScale,
+            tintColor = resolvedFill,
+            shadeColor = resolvedShade,
             modifier = Modifier.fillMaxSize()
         )
 

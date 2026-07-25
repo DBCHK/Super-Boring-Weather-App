@@ -1,3 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Not Boring Weather</string>
+
+    <string name="widget_red_sun_desc">Temperature with red sun orb (2×2)</string>
+    <string name="widget_three_day_desc">3-day forecast (2×2)</string>
+    <string name="widget_wide_rain_desc">Temp, condition and high/low bar (4×2)</string>
+    <string name="widget_air_quality_desc">Air quality index (2×2)</string>
+    <string name="widget_moon_desc">Moon phase (2×2)</string>
+    <string name="widget_compact_rain_desc">Compact condition widget (2×2)</string>
+    <string name="widget_weather_icon_desc">Weather icon</string>
 </resources>

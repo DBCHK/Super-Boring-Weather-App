@@ -274,7 +274,7 @@ fun Modifier.interactive3D(
                     }
                     if (playSound) {
                         view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                        soundManager.playWaterDropletSound()
+                        soundManager.playRandomDroplet()
                     }
                     tryAwaitRelease()
                     // Ease-in spring bounce on release
@@ -304,7 +304,7 @@ fun Modifier.interactive3D(
                     }
                     if (playSound) {
                         view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                        soundManager.playWaterDropletSound()
+                        soundManager.play(PianoSoundManager.DropletKind.DRIP)
                     }
                 },
                 onDragEnd = {

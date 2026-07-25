@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,16 +35,20 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -63,8 +69,19 @@ import com.example.ui.components.WindCompassCanvas
 import com.example.ui.components.WeatherFooter
 import com.example.ui.components.formatPrecipInches
 import com.example.ui.viewmodel.TemperatureUnit
-import com.example.util.rememberDropletFeedback
+import com.example.util.rememberDropletPlayers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+
+private val DetailTabs = listOf(
+    "PRECIP" to "tab_precip",
+    "MOON" to "tab_moon",
+    "ALERTS" to "tab_alerts",
+    "WIND" to "tab_wind",
+    "UV & AIR" to "tab_uv_air",
+    "7-DAY" to "tab_7day"
+)
 
 @Composable
 fun DetailedForecastScreen(
@@ -75,11 +92,21 @@ fun DetailedForecastScreen(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0=PRECIP … 5=7-DAY (no widgets)
     var isWeekMode by remember { mutableStateOf(false) }
     var selectedDayIndex by remember { mutableIntStateOf(0) }
+    val feedback = rememberDropletPlayers()
+    val playFeedback = feedback.tap
+    val scope = rememberCoroutineScope()
+    val pagerState = rememberPagerState(pageCount = { DetailTabs.size })
 
-    val (playFeedback, _) = rememberDropletFeedback()
+    // Keep chip selection in sync with swipe
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }
+            .distinctUntilChanged()
+            .collect { page ->
+                feedback.tick()
+            }
+    }
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -89,8 +116,6 @@ fun DetailedForecastScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 20.dp, vertical = 12.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header
             Row(
@@ -127,7 +152,7 @@ fun DetailedForecastScreen(
 
                 IconButton(
                     onClick = {
-                        playFeedback()
+                        feedback.splash()
                         onClose()
                     },
                     modifier = Modifier
@@ -143,31 +168,26 @@ fun DetailedForecastScreen(
                 }
             }
 
-            // Tab chips
+            // Tab chips — swipe pager also moves between these
+            val tabScroll = rememberScrollState()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 12.dp)
-                    .horizontalScroll(rememberScrollState()),
+                    .horizontalScroll(tabScroll),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val tabs = listOf(
-                    "PRECIP" to "tab_precip",
-                    "MOON" to "tab_moon",
-                    "ALERTS" to "tab_alerts",
-                    "WIND" to "tab_wind",
-                    "UV & AIR" to "tab_uv_air",
-                    "7-DAY" to "tab_7day"
-                )
-                tabs.forEachIndexed { idx, (label, tag) ->
-                    val isSel = selectedTab == idx
+                DetailTabs.forEachIndexed { idx, (label, tag) ->
+                    val isSel = pagerState.currentPage == idx
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(16.dp))
                             .background(if (isSel) Color(0xFF1C1C1E) else Color(0xFFE5E5EA))
                             .clickable {
-                                playFeedback()
-                                selectedTab = idx
+                                feedback.plink()
+                                scope.launch {
+                                    pagerState.animateScrollToPage(idx)
+                                }
                             }
                             .padding(horizontal = 16.dp, vertical = 10.dp)
                             .testTag(tag),
@@ -184,70 +204,81 @@ fun DetailedForecastScreen(
                 }
             }
 
-            // ── TAB 0: PRECIPITATION ──────────────────────────────────────
-            if (selectedTab == 0) {
-                PrecipTabContent(
-                    data = data,
-                    selectedHourIndex = selectedHourIndex,
-                    selectedDayIndex = selectedDayIndex.coerceIn(0, data.dailyList.lastIndex.coerceAtLeast(0)),
-                    isWeekMode = isWeekMode,
-                    onHourSelected = onHourSelected,
-                    onDaySelected = { selectedDayIndex = it },
-                    onWeekModeChange = { isWeekMode = it },
-                    playFeedback = playFeedback
-                )
-            }
+            Text(
+                text = "SWIPE LEFT / RIGHT TO SWITCH TABS",
+                fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace,
+                color = Color(0xFFAEAEB2),
+                letterSpacing = 0.8.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp)
+            )
 
-            // ── TAB 1: MOON ───────────────────────────────────────────────
-            if (selectedTab == 1) {
-                MoonPhaseView(data = data)
-            }
-
-            // ── TAB 2: ALERTS ─────────────────────────────────────────────
-            if (selectedTab == 2) {
-                SevereWeatherAlertView(data = data)
-            }
-
-            // ── TAB 3: WIND ───────────────────────────────────────────────
-            if (selectedTab == 3) {
-                WindTabContent(
-                    data = data,
-                    selectedHourIndex = selectedHourIndex,
-                    isWeekMode = isWeekMode,
-                    onWeekModeChange = { isWeekMode = it },
-                    playFeedback = playFeedback
-                )
-            }
-
-            // ── TAB 4: UV & AIR ───────────────────────────────────────────
-            if (selectedTab == 4) {
-                UvAirTabContent(
-                    data = data,
-                    selectedHourIndex = selectedHourIndex,
-                    selectedDayIndex = selectedDayIndex.coerceIn(0, data.dailyList.lastIndex.coerceAtLeast(0)),
-                    isWeekMode = isWeekMode,
-                    onWeekModeChange = { isWeekMode = it },
-                    onDaySelected = { selectedDayIndex = it },
-                    playFeedback = playFeedback
-                )
-            }
-
-            // ── TAB 5: 7-DAY ──────────────────────────────────────────────
-            if (selectedTab == 5) {
-                SevenDayTabContent(
-                    data = data,
-                    temperatureUnit = temperatureUnit,
-                    selectedDayIndex = selectedDayIndex.coerceIn(0, data.dailyList.lastIndex.coerceAtLeast(0)),
-                    onDaySelected = {
-                        playFeedback()
-                        selectedDayIndex = it
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) { page ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    when (page) {
+                        0 -> PrecipTabContent(
+                            data = data,
+                            selectedHourIndex = selectedHourIndex,
+                            selectedDayIndex = selectedDayIndex.coerceIn(
+                                0,
+                                data.dailyList.lastIndex.coerceAtLeast(0)
+                            ),
+                            isWeekMode = isWeekMode,
+                            onHourSelected = onHourSelected,
+                            onDaySelected = { selectedDayIndex = it },
+                            onWeekModeChange = { isWeekMode = it },
+                            playFeedback = playFeedback
+                        )
+                        1 -> MoonPhaseView(data = data)
+                        2 -> SevereWeatherAlertView(data = data, playFeedback = playFeedback)
+                        3 -> WindTabContent(
+                            data = data,
+                            selectedHourIndex = selectedHourIndex,
+                            isWeekMode = isWeekMode,
+                            onWeekModeChange = { isWeekMode = it },
+                            playFeedback = playFeedback
+                        )
+                        4 -> UvAirTabContent(
+                            data = data,
+                            selectedHourIndex = selectedHourIndex,
+                            selectedDayIndex = selectedDayIndex.coerceIn(
+                                0,
+                                data.dailyList.lastIndex.coerceAtLeast(0)
+                            ),
+                            isWeekMode = isWeekMode,
+                            onWeekModeChange = { isWeekMode = it },
+                            onDaySelected = { selectedDayIndex = it },
+                            playFeedback = playFeedback
+                        )
+                        5 -> SevenDayTabContent(
+                            data = data,
+                            temperatureUnit = temperatureUnit,
+                            selectedDayIndex = selectedDayIndex.coerceIn(
+                                0,
+                                data.dailyList.lastIndex.coerceAtLeast(0)
+                            ),
+                            onDaySelected = {
+                                playFeedback()
+                                selectedDayIndex = it
+                            }
+                        )
                     }
-                )
+                    WeatherFooter()
+                    Spacer(modifier = Modifier.height(32.dp))
+                }
             }
-
-            WeatherFooter()
-
-            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
@@ -658,21 +689,72 @@ private fun WindTabContent(
     val beaufort = beaufortLabel(speed)
     val avgWeekSpeed = data.hourlyList.map { it.windSpeedMph }.average().toFloat()
     val maxWeekSpeed = data.hourlyList.maxOfOrNull { it.windSpeedMph } ?: speed
+    val motion = com.example.ui.components.rememberDeviceMotionState(intensity = 0.9f)
 
+    // Hero: dark Not Boring card + compass + huge speed
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(210.dp)
+            .height(240.dp)
             .clip(RoundedCornerShape(28.dp))
-            .background(Color(0xFFE8F4FF))
-            .padding(vertical = 12.dp),
-        contentAlignment = Alignment.Center
+            .background(
+                Brush.verticalGradient(listOf(Color(0xFF1C1C1E), Color(0xFF2C2C2E)))
+            )
+            .padding(16.dp)
     ) {
         WindCompassCanvas(
             degrees = degrees,
             speedMph = speed,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = motion.offsetX * 12f
+                    translationY = motion.offsetY * 8f
+                }
         )
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(4.dp)
+        ) {
+            Text(
+                text = "WIND",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 1.5.sp,
+                color = Color(0xFF8E8E93)
+            )
+            Text(
+                text = "${speed.roundToInt()}",
+                fontSize = 48.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.SansSerif,
+                color = Color.White
+            )
+            Text(
+                text = "MPH · $directionLabel",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = Color(0xFF64D2FF)
+            )
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFFFFB300))
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = beaufort.uppercase(),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                color = Color(0xFF1C1C1E)
+            )
+        }
     }
 
     Spacer(modifier = Modifier.height(14.dp))
@@ -687,6 +769,77 @@ private fun WindTabContent(
         InfoChip(label = "DIR", value = "$directionLabel $degrees°", accent = Color(0xFF5856D6))
         InfoChip(label = "FORCE", value = beaufort, accent = Color(0xFFFF9500))
         InfoChip(label = "GUST MAX", value = "${maxWeekSpeed.roundToInt()} MPH", accent = Color(0xFFFF3B30))
+    }
+
+    Spacer(modifier = Modifier.height(14.dp))
+
+    // Stream bars — hourly wind strength
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.White)
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "WIND STREAM · NEXT HOURS",
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Black,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 1.sp,
+            color = Color(0xFF8E8E93)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        val hours = data.hourlyList.take(8)
+        val maxS = (hours.maxOfOrNull { it.windSpeedMph } ?: 1f).coerceAtLeast(1f)
+        hours.forEach { hour ->
+            val frac = (hour.windSpeedMph / maxS).coerceIn(0.08f, 1f)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .clickable { playFeedback() },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = hour.timeLabel,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1C1C1E),
+                    modifier = Modifier.width(40.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(14.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFE5E5EA))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(frac)
+                            .height(14.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(Color(0xFF64D2FF), Color(0xFF007AFF))
+                                )
+                            )
+                    )
+                }
+                Text(
+                    text = "${hour.windSpeedMph.roundToInt()}",
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF007AFF),
+                    modifier = Modifier
+                        .width(36.dp)
+                        .padding(start = 8.dp)
+                )
+            }
+        }
     }
 
     Spacer(modifier = Modifier.height(14.dp))
@@ -715,46 +868,12 @@ private fun WindTabContent(
             value = windFeelLabel(speed),
             valueColor = Color(0xFF30B0C7)
         )
-    }
-
-    if (isWeekMode) {
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "WIND BY HOUR",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Black,
-            fontFamily = FontFamily.Monospace,
-            letterSpacing = 1.sp,
-            color = Color(0xFF8E8E93),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
+        MetricDivider()
+        MetricRow(
+            label = "RAIN DRIFT",
+            value = "Rain follows $directionLabel wind",
+            valueColor = Color(0xFF8E8E93)
         )
-        data.hourlyList.take(8).forEach { hour ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = hour.timeLabel,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    color = Color(0xFF1C1C1E)
-                )
-                Text(
-                    text = "${hour.windSpeedMph} MPH · ${degreesToCompass(hour.windDirectionDegrees)}",
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = Color(0xFF007AFF)
-                )
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-        }
     }
 
     DayWeekToggle(
@@ -805,19 +924,94 @@ private fun UvAirTabContent(
         data.hourlyList.maxOfOrNull { it.uvIndex } ?: uv
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(190.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .background(Color.White)
-            .padding(vertical = 12.dp),
-        contentAlignment = Alignment.Center
+    // Split hero: UV meter + AQI wordmark (reference language)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        UvMeterCanvas(
-            uvIndex = uv,
-            modifier = Modifier.fillMaxSize()
-        )
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(180.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color.White)
+                .padding(10.dp)
+                .clickable { playFeedback() }
+        ) {
+            Text(
+                text = "UV INDEX",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                color = Color(0xFF8E8E93),
+                modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
+            )
+            UvMeterCanvas(
+                uvIndex = uv,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 18.dp)
+            )
+            Text(
+                text = "${"%.0f".format(uv)} · $uvLabel",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                color = uvColor(uv),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp)
+            )
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .height(180.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xFF1C1C1E))
+                .clickable { playFeedback() }
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "AIR QUALITY",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFF8E8E93)
+                    )
+                    Text(
+                        text = "AQI:$aqi",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color.White
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(aqiColor(aqi))
+                )
+            }
+            Text(
+                text = aqiLabel,
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.SansSerif,
+                color = Color.White
+            )
+            Text(
+                text = airAdvice(aqi),
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                color = Color(0xFF8E8E93)
+            )
+        }
     }
 
     Spacer(modifier = Modifier.height(14.dp))

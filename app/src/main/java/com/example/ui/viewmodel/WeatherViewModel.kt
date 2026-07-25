@@ -200,6 +200,11 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
                 if (_selectedCity.value.id == city.id) {
                     _weatherUiState.value = WeatherUiState.Success(data)
                     _selectedHourIndex.value = 0
+                    // Keep home-screen widgets in sync
+                    com.example.widget.WidgetUpdateHelper.publishFromApp(
+                        getApplication(),
+                        com.example.widget.WidgetSnapshot.from(data)
+                    )
                 }
             } catch (e: Exception) {
                 if (_selectedCity.value.id == city.id) {

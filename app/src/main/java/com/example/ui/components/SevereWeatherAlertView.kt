@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -50,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -64,7 +66,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.WeatherCondition
 import com.example.data.model.WeatherForecastData
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 private data class AlertCard(
     val id: String,
@@ -78,14 +82,15 @@ private data class AlertCard(
 )
 
 /**
- * Interactive ALERTS hub: radar-style threat ring, tappable cards, severity dial, acknowledge flow.
+ * ALERTS hub — radar threat index, expandable cards, no weather cloud model.
  */
 @Composable
 fun SevereWeatherAlertView(
     data: WeatherForecastData,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    playFeedback: () -> Unit = {}
 ) {
-    val motion = rememberDeviceMotionState(intensity = 1.1f)
+    val motion = rememberDeviceMotionState(intensity = 1.05f)
     val infinite = rememberInfiniteTransition(label = "alertPulse")
     val pulse by infinite.animateFloat(
         initialValue = 0.88f,
@@ -100,7 +105,7 @@ fun SevereWeatherAlertView(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(4800, easing = LinearEasingCompat),
+            animation = tween(4800, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "ringSweep"
@@ -112,7 +117,6 @@ fun SevereWeatherAlertView(
     var selectedIndex by remember { mutableIntStateOf(0) }
     var expandedId by remember { mutableStateOf<String?>(alerts.firstOrNull()?.id) }
     var acknowledged by remember { mutableStateOf(setOf<String>()) }
-    // Interactive severity dial 0..1 (user can drag)
     var dialBoost by remember { mutableFloatStateOf(0f) }
 
     val selected = alerts.getOrNull(selectedIndex) ?: alerts.first()
@@ -130,120 +134,105 @@ fun SevereWeatherAlertView(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // ── Threat radar hero ───────────────────────────────────────────
+        // Radar hero — no cloud / weather GLB
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(260.dp)
+                .height(250.dp)
                 .clip(RoundedCornerShape(28.dp))
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color(0xFF1A0A0A), Color(0xFF0A0A0B), Color(0xFF121214))
+                        listOf(Color(0xFF1A0A0A), Color(0xFF121214), Color(0xFF0A0A0B))
                     )
                 )
                 .pointerInput(Unit) {
                     detectDragGestures { change, drag ->
                         change.consume()
-                        // Drag right/up raises perceived threat (interactive)
                         dialBoost = (dialBoost + drag.x / size.width * 0.55f - drag.y / size.height * 0.35f)
                             .coerceIn(-0.35f, 0.55f)
+                        playFeedback()
                     }
                 }
                 .testTag("alert_threat_radar"),
             contentAlignment = Alignment.Center
         ) {
-            // Background weather glyph reacts to tilt
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        translationX = motion.offsetX * 28f
-                        translationY = motion.offsetY * 18f
-                        rotationZ = motion.yawDeg * 0.15f
-                    }
-            ) {
-                ThreeDWeatherCanvas(
-                    condition = when (data.condition) {
-                        WeatherCondition.THUNDERSTORM -> WeatherCondition.THUNDERSTORM
-                        WeatherCondition.SNOWY -> WeatherCondition.SNOWY
-                        WeatherCondition.RAINY, WeatherCondition.HEAVY_RAIN -> WeatherCondition.HEAVY_RAIN
-                        else -> WeatherCondition.CLOUDY
-                    },
-                    isDaytime = false,
-                    modelScale = 1.1f,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            // Radar rings + threat arc (device tilt shifts center slightly)
+            // Soft hazard grid
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        translationX = motion.offsetX * 12f
-                        translationY = motion.offsetY * 10f
+                        translationX = motion.offsetX * 16f
+                        translationY = motion.offsetY * 12f
                     }
             ) {
                 val cx = size.width / 2f
-                val cy = size.height / 2f + 8f
-                val r = size.minDimension * 0.34f
+                val cy = size.height / 2f + 10f
+                val r = size.minDimension * 0.36f
 
-                for (i in 1..3) {
+                // Concentric hazard rings
+                for (i in 1..4) {
                     drawCircle(
-                        color = Color(0xFFFF453A).copy(alpha = 0.12f * pulse),
-                        radius = r * (0.45f + i * 0.28f),
+                        color = Color(0xFFFF453A).copy(alpha = 0.08f + i * 0.03f),
+                        radius = r * (0.3f + i * 0.22f),
                         center = Offset(cx, cy),
-                        style = Stroke(width = 1.5f)
+                        style = Stroke(width = 1.4f)
                     )
                 }
-
-                // Sweep arm
+                // Cross hairs
+                drawLine(
+                    Color(0xFFFF453A).copy(alpha = 0.15f),
+                    Offset(cx - r * 1.2f, cy),
+                    Offset(cx + r * 1.2f, cy),
+                    1.2f
+                )
+                drawLine(
+                    Color(0xFFFF453A).copy(alpha = 0.15f),
+                    Offset(cx, cy - r * 1.2f),
+                    Offset(cx, cy + r * 1.2f),
+                    1.2f
+                )
+                // Sweep
                 val rad = Math.toRadians(ringSweep.toDouble())
                 drawLine(
-                    color = Color(0xFFFFB300).copy(alpha = 0.35f),
+                    color = Color(0xFFFFB300).copy(alpha = 0.4f),
                     start = Offset(cx, cy),
                     end = Offset(
-                        cx + kotlin.math.cos(rad).toFloat() * r * 1.25f,
-                        cy + kotlin.math.sin(rad).toFloat() * r * 1.25f
+                        cx + cos(rad).toFloat() * r * 1.2f,
+                        cy + sin(rad).toFloat() * r * 1.2f
                     ),
-                    strokeWidth = 2f,
+                    strokeWidth = 2.5f,
                     cap = StrokeCap.Round
                 )
-
                 // Threat arc
                 drawArc(
-                    color = selected.severityColor.copy(alpha = 0.9f),
+                    color = selected.severityColor.copy(alpha = 0.95f),
                     startAngle = -90f,
                     sweepAngle = 360f * threatAnim,
                     useCenter = false,
                     topLeft = Offset(cx - r, cy - r),
-                    size = androidx.compose.ui.geometry.Size(r * 2, r * 2),
-                    style = Stroke(width = 10f, cap = StrokeCap.Round)
+                    size = Size(r * 2, r * 2),
+                    style = Stroke(width = 11f, cap = StrokeCap.Round)
                 )
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.9f),
-                    radius = 6f,
-                    center = Offset(cx, cy)
-                )
+                drawCircle(Color.White.copy(alpha = 0.95f), radius = 5f, center = Offset(cx, cy))
             }
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = "${(threatAnim * 100).roundToInt()}",
-                    fontSize = 42.sp,
+                    fontSize = 48.sp,
                     fontWeight = FontWeight.Black,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = FontFamily.SansSerif,
                     color = Color.White
                 )
                 Text(
                     text = "THREAT INDEX",
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Black,
                     fontFamily = FontFamily.Monospace,
-                    letterSpacing = 1.5.sp,
+                    letterSpacing = 1.6.sp,
                     color = Color(0xFFFFB300)
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "DRAG TO SIMULATE · TILT PHONE",
                     fontSize = 9.sp,
@@ -252,7 +241,6 @@ fun SevereWeatherAlertView(
                 )
             }
 
-            // Floating alert pill
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -284,7 +272,6 @@ fun SevereWeatherAlertView(
             }
         }
 
-        // ── Interactive alert cards ─────────────────────────────────────
         Text(
             text = "ACTIVE ALERTS · TAP TO EXPAND",
             fontSize = 10.sp,
@@ -292,9 +279,7 @@ fun SevereWeatherAlertView(
             fontFamily = FontFamily.Monospace,
             letterSpacing = 1.sp,
             color = Color(0xFF8E8E93),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp)
+            modifier = Modifier.fillMaxWidth()
         )
 
         alerts.forEachIndexed { index, alert ->
@@ -313,6 +298,7 @@ fun SevereWeatherAlertView(
                         shape = RoundedCornerShape(18.dp)
                     )
                     .clickable {
+                        playFeedback()
                         selectedIndex = index
                         expandedId = if (isExpanded) null else alert.id
                     }
@@ -351,7 +337,7 @@ fun SevereWeatherAlertView(
                         }
                     }
                     Icon(
-                        imageVector = Icons.Default.ExpandMore,
+                        Icons.Default.ExpandMore,
                         contentDescription = null,
                         tint = Color(0xFF8E8E93),
                         modifier = Modifier
@@ -362,13 +348,16 @@ fun SevereWeatherAlertView(
 
                 Spacer(modifier = Modifier.height(8.dp))
                 LinearProgressIndicator(
-                    progress = { (alert.threatScore + if (isSelected) dialBoost * 0.2f else 0f).coerceIn(0f, 1f) },
+                    progress = {
+                        (alert.threatScore + if (isSelected) dialBoost * 0.2f else 0f)
+                            .coerceIn(0f, 1f)
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(4.dp)
                         .clip(RoundedCornerShape(2.dp)),
                     color = alert.severityColor,
-                    trackColor = if (isSelected) Color(0xFF2C2C2E) else Color(0xFFE5E5EA),
+                    trackColor = if (isSelected) Color(0xFF2C2C2E) else Color(0xFFE5E5EA)
                 )
 
                 AnimatedVisibility(
@@ -414,6 +403,7 @@ fun SevereWeatherAlertView(
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(if (isAck) Color(0xFF34C759) else Color(0xFFFFB300))
                                 .clickable {
+                                    playFeedback()
                                     acknowledged = if (isAck) {
                                         acknowledged - alert.id
                                     } else {
@@ -444,7 +434,6 @@ fun SevereWeatherAlertView(
             }
         }
 
-        // Meta strip
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -454,18 +443,12 @@ fun SevereWeatherAlertView(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             MetaRow("ISSUED BY", "NATIONAL WEATHER SERVICE")
-            Spacer(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF2C2C2E)))
+            Spacer(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF2C2C2E)))
             MetaRow("LOCATION", data.cityName.uppercase())
-            Spacer(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF2C2C2E)))
-            MetaRow(
-                "ACK'D",
-                "${acknowledged.size} / ${alerts.size}"
-            )
-            Spacer(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF2C2C2E)))
-            MetaRow(
-                "TIP",
-                "Drag radar · tilt phone · expand cards"
-            )
+            Spacer(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF2C2C2E)))
+            MetaRow("ACK'D", "${acknowledged.size} / ${alerts.size}")
+            Spacer(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF2C2C2E)))
+            MetaRow("TIP", "Drag radar · expand cards · swipe tabs")
         }
     }
 }
@@ -489,9 +472,6 @@ private fun MetaRow(label: String, value: String) {
     }
 }
 
-// LinearEasing alias for animation import clarity in this file
-private val LinearEasingCompat = androidx.compose.animation.core.LinearEasing
-
 private fun buildAlerts(data: WeatherForecastData): List<AlertCard> {
     val city = data.cityName
     val primary = when (data.condition) {
@@ -500,7 +480,7 @@ private fun buildAlerts(data: WeatherForecastData): List<AlertCard> {
             title = "THUNDERSTORM WARNING",
             severity = "SEVERE",
             severityColor = Color(0xFFFF453A),
-            summary = "Damaging winds and frequent lightning possible near $city. Outdoor activities unsafe until the cell passes.",
+            summary = "Damaging winds and lightning possible near $city. Outdoor activities unsafe until the cell passes.",
             action = "SEEK INDOOR SHELTER NOW",
             threatScore = 0.88f,
             expiresLabel = "EXPIRES 3H"
@@ -510,7 +490,7 @@ private fun buildAlerts(data: WeatherForecastData): List<AlertCard> {
             title = "FLOOD ADVISORY",
             severity = "MODERATE",
             severityColor = Color(0xFF007AFF),
-            summary = "Heavy rain rates near $city. Ponding on roads and poor visibility expected. ${data.precipChancePercent}% precip chance in the window.",
+            summary = "Heavy rain rates near $city. Ponding on roads. ${data.precipChancePercent}% precip chance in the window.",
             action = "AVOID LOW-LYING ROADS",
             threatScore = 0.62f,
             expiresLabel = "EXPIRES 6H"
@@ -520,7 +500,7 @@ private fun buildAlerts(data: WeatherForecastData): List<AlertCard> {
             title = "WINTER WEATHER",
             severity = "HIGH",
             severityColor = Color(0xFF64D2FF),
-            summary = "Snow accumulation and slick surfaces around $city. Travel delays likely; wind ${data.windSpeedMph} mph.",
+            summary = "Snow and slick surfaces around $city. Wind ${data.windSpeedMph} mph.",
             action = "ALLOW EXTRA TRAVEL TIME",
             threatScore = 0.74f,
             expiresLabel = "EXPIRES 12H"
@@ -530,34 +510,31 @@ private fun buildAlerts(data: WeatherForecastData): List<AlertCard> {
             title = "WEATHER WATCH",
             severity = "ADVISORY",
             severityColor = Color(0xFFFFB300),
-            summary = "Conditions around $city are changeable. Stay weather-aware; UV ${data.uvIndex.roundToInt()} and AQI ${data.airQualityIndex}.",
+            summary = "Conditions around $city are changeable. UV ${data.uvIndex.roundToInt()} · AQI ${data.airQualityIndex}.",
             action = "MONITOR CONDITIONS",
             threatScore = 0.35f,
             expiresLabel = "ONGOING"
         )
     }
-
     val air = AlertCard(
         id = "air",
         title = "AIR QUALITY NOTE",
         severity = if (data.airQualityIndex > 100) "ELEVATED" else "GOOD",
         severityColor = if (data.airQualityIndex > 100) Color(0xFFFF9500) else Color(0xFF34C759),
-        summary = "AQI sits at ${data.airQualityIndex} for $city. Sensitive groups should limit prolonged outdoor exertion if elevated.",
+        summary = "AQI ${data.airQualityIndex} for $city. Sensitive groups should limit outdoor exertion if elevated.",
         action = if (data.airQualityIndex > 100) "LIMIT OUTDOOR EXERTION" else "CONDITIONS FAVORABLE",
         threatScore = (data.airQualityIndex / 200f).coerceIn(0.1f, 0.9f),
         expiresLabel = "TODAY"
     )
-
     val wind = AlertCard(
         id = "wind",
         title = "WIND BRIEFING",
         severity = if (data.windSpeedMph > 20f) "GUSTY" else "CALM",
         severityColor = if (data.windSpeedMph > 20f) Color(0xFFAF52DE) else Color(0xFF8E8E93),
-        summary = "Sustained winds near ${data.windSpeedMph} mph. Secure loose outdoor items if gusts pick up.",
+        summary = "Winds near ${data.windSpeedMph} mph. Secure loose outdoor items if gusts pick up.",
         action = if (data.windSpeedMph > 20f) "SECURE LOOSE OBJECTS" else "NO ACTION NEEDED",
         threatScore = (data.windSpeedMph / 40f).coerceIn(0.08f, 0.85f),
         expiresLabel = "NEXT 12H"
     )
-
     return listOf(primary, air, wind)
 }

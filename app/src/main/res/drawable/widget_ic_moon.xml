@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="72dp"
+    android:height="72dp"
+    android:viewportWidth="72"
+    android:viewportHeight="72">
+    <!-- Dark disc -->
+    <path
+        android:fillColor="#FF1C1C1E"
+        android:pathData="M36,8a28,28 0 1,0 0,56a28,28 0 1,0 0,-56z" />
+    <!-- Lit crescent (left edge) -->
+    <path
+        android:fillColor="#FFE5E5EA"
+        android:pathData="M36,10c-14.4,0 -26,11.6 -26,26s11.6,26 26,26c3.2,0 6.2,-0.6 9,-1.6C33.5,55.5 24,46.5 24,36S33.5,16.5 45,11.6C42.2,10.6 39.2,10 36,10z" />
+</vector>

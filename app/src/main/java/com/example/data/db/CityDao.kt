@@ -21,4 +21,10 @@ interface CityDao {
 
     @Query("SELECT * FROM saved_cities WHERE isDefault = 1 LIMIT 1")
     suspend fun getDefaultCity(): CityEntity?
+
+    @Query("SELECT * FROM saved_cities ORDER BY isDefault DESC, name ASC LIMIT 1")
+    suspend fun getPreferredCity(): CityEntity?
+
+    @Query("SELECT * FROM saved_cities ORDER BY name ASC")
+    suspend fun getAllCitiesOnce(): List<CityEntity>
 }

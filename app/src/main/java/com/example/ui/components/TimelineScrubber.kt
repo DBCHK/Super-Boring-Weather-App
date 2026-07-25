@@ -40,7 +40,10 @@ fun TimelineScrubber(
     highTemp: Int,
     lowTemp: Int,
     onHourSelected: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    trackColor: Color = Color(0xFFE5E5EA),
+    activeColor: Color = Color(0xFF1C1C1E),
+    labelColor: Color = Color(0xFF8E8E93)
 ) {
     if (hourlyList.isEmpty()) return
 
@@ -56,7 +59,7 @@ fun TimelineScrubber(
                 .fillMaxWidth()
                 .height(44.dp)
                 .clip(RoundedCornerShape(22.dp))
-                .background(Color(0xFFE5E5EA))
+                .background(trackColor)
                 .pointerInput(hourlyList) {
                     detectDragGestures { change, dragAmount ->
                         change.consume()
@@ -87,17 +90,26 @@ fun TimelineScrubber(
                         modifier = Modifier
                             .size(if (idx == selectedIndex) 8.dp else 4.dp)
                             .clip(CircleShape)
-                            .background(if (idx == selectedIndex) Color(0xFF1C1C1E) else Color(0xFFA1A1A6))
+                            .background(
+                                if (idx == selectedIndex) activeColor
+                                else labelColor.copy(alpha = 0.55f)
+                            )
                     )
                 }
             }
 
-            // Scrub Capsule Pill ("19 | 11" High / Low or Current Selected Hour Stats)
-            val currentHourly = hourlyList.getOrNull(selectedIndex) ?: hourlyList.first()
+            // Scrub Capsule Pill (high / low)
+            val pillBg = activeColor
+            val pillFg = if (activeColor == Color.White || activeColor == Color(0xFFF5F5F7)) {
+                Color(0xFF1C1C1E)
+            } else {
+                Color.White
+            }
+            val pillMuted = pillFg.copy(alpha = 0.55f)
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(18.dp))
-                    .background(Color(0xFF1C1C1E))
+                    .background(pillBg)
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -106,10 +118,9 @@ fun TimelineScrubber(
                     text = "${highTemp}°",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = pillFg
                 )
 
-                // Half moon / separator indicator
                 Box(
                     modifier = Modifier
                         .size(8.dp)
@@ -121,12 +132,11 @@ fun TimelineScrubber(
                     text = "${lowTemp}°",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFA1A1A6)
+                    color = pillMuted
                 )
             }
         }
 
-        // Horizontal Time Labels below timeline ("NOW", "12A", "3A", "6A", "9A", "12P", "3P", "6P")
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -142,7 +152,7 @@ fun TimelineScrubber(
                     fontSize = 10.sp,
                     fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium,
                     fontFamily = FontFamily.Monospace,
-                    color = if (isSelected) Color(0xFF1C1C1E) else Color(0xFF8E8E93)
+                    color = if (isSelected) activeColor else labelColor
                 )
             }
         }

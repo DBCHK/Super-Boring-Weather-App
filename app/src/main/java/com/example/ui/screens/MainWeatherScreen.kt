@@ -57,6 +57,8 @@ import com.example.ui.components.TimelineScrubber
 import com.example.ui.components.WeatherBackgroundShaderCanvas
 import com.example.ui.components.WeatherFooter
 import com.example.ui.components.rememberInteractive3DState
+import com.example.ui.theme.AppThemeMode
+import com.example.ui.theme.ThemePalette
 import com.example.ui.viewmodel.TemperatureUnit
 import com.example.ui.viewmodel.WeatherUiState
 import com.example.util.rememberDropletFeedback
@@ -77,19 +79,15 @@ fun MainWeatherScreen(
     onOpenDetailsCard: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var themeMode by remember { mutableIntStateOf(0) } // 0 = Light Minimal, 1 = Vibrant Yellow (Image 5), 2 = Dark Charcoal
-
-    val backgroundColor = when (themeMode) {
-        1 -> Color(0xFFFFB300) // Vibrant Gold/Yellow (Matching Image 5)
-        2 -> Color(0xFF1C1C1E) // Dark Charcoal
-        else -> Color(0xFFF2F2F7) // Light Minimal
+    var themeMode by remember { mutableIntStateOf(0) } // 0 Light, 1 Yellow, 2 Dark
+    val appTheme = when (themeMode) {
+        1 -> AppThemeMode.YELLOW
+        2 -> AppThemeMode.DARK
+        else -> AppThemeMode.LIGHT
     }
-
-    val primaryTextColor = when (themeMode) {
-        1 -> Color(0xFF1C1C1E)
-        2 -> Color.White
-        else -> Color(0xFF1C1C1E)
-    }
+    val palette = ThemePalette.forMode(appTheme)
+    val backgroundColor = palette.background
+    val primaryTextColor = palette.primaryText
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -106,7 +104,7 @@ fun MainWeatherScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         CircularProgressIndicator(
-                            color = Color(0xFF1C1C1E),
+                            color = primaryTextColor,
                             strokeWidth = 3.dp
                         )
                         Text(
@@ -115,7 +113,7 @@ fun MainWeatherScreen(
                             fontWeight = FontWeight.Black,
                             fontFamily = FontFamily.Monospace,
                             letterSpacing = 1.5.sp,
-                            color = Color(0xFF8E8E93)
+                            color = palette.secondaryText
                         )
                     }
                 }
@@ -197,6 +195,12 @@ fun MainWeatherScreen(
                     // Background Particle Shader Canvas Layer behind giant typography
                     WeatherBackgroundShaderCanvas(
                         condition = condition,
+                        particlePrimary = palette.particlePrimary,
+                        particleSecondary = palette.particleSecondary,
+                        isDarkTheme = palette.isDark,
+                        windDirectionDegrees = currentHourly?.windDirectionDegrees
+                            ?: data.windDirectionDegrees,
+                        windSpeedMph = currentHourly?.windSpeedMph ?: data.windSpeedMph,
                         modifier = Modifier.fillMaxSize()
                     )
 
@@ -208,10 +212,10 @@ fun MainWeatherScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Top
                     ) {
-                        // Compact top chrome — smaller chips & icons
-                        val chromeBg = if (themeMode == 1) Color(0xFF1C1C1E) else Color(0xFFE5E5EA)
-                        val chromeFg = if (themeMode == 1) Color.White else Color(0xFF1C1C1E)
-                        val chromeMuted = if (themeMode == 1) Color.White.copy(alpha = 0.45f) else Color(0xFF8E8E93)
+                        // Compact top chrome — theme-aware chips & icons
+                        val chromeBg = palette.chromeBg
+                        val chromeFg = palette.chromeFg
+                        val chromeMuted = palette.chromeMuted
 
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -390,6 +394,9 @@ fun MainWeatherScreen(
                                     condition = condition,
                                     isDaytime = currentHourly?.isDaytime ?: true,
                                     modelScale = 1.85f,
+                                    // Clouds/etc follow theme; sun stays gold inside canvas
+                                    tintColor = if (palette.isDark) Color(0xFFF2F2F7) else Color(0xFF2C2C2E),
+                                    shadeColor = if (palette.isDark) Color(0xFFC7C7CC) else Color(0xFF636366),
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
@@ -407,6 +414,10 @@ fun MainWeatherScreen(
                                 interactionState = tempInteraction,
                                 scaleToUnits = 1.55f,
                                 spacing = 1.05f,
+                                fillColor = palette.elementFill,
+                                shadeColor = palette.elementShade,
+                                shadowColor = palette.elementShadow,
+                                highlightColor = palette.elementHighlight,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(150.dp)
@@ -433,6 +444,9 @@ fun MainWeatherScreen(
                                 playFeedback()
                                 onHourSelected(idx)
                             },
+                            trackColor = palette.scrubberTrack,
+                            activeColor = palette.scrubberActive,
+                            labelColor = palette.secondaryText,
                             modifier = Modifier
                                 .padding(vertical = 16.dp)
                                 .testTag("timeline_scrubber")
@@ -454,7 +468,7 @@ fun MainWeatherScreen(
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowUp,
                                 contentDescription = "Expand",
-                                tint = if (themeMode == 1) Color(0xFF1C1C1E) else Color(0xFF8E8E93),
+                                tint = palette.secondaryText,
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
@@ -463,12 +477,12 @@ fun MainWeatherScreen(
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace,
                                 letterSpacing = 1.sp,
-                                color = if (themeMode == 1) Color(0xFF1C1C1E) else Color(0xFF8E8E93)
+                                color = palette.secondaryText
                             )
                         }
 
                         WeatherFooter(
-                            textColor = primaryTextColor
+                            textColor = palette.secondaryText
                         )
                     }
                 }
