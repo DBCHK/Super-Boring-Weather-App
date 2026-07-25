@@ -1,12 +1,21 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -26,16 +35,30 @@ fun ThreeDTemperatureText(
 ) {
     val tempString = "$temperatureValue"
 
+    // Ease-in scale pulse whenever the temperature changes
+    var targetScale by remember { mutableFloatStateOf(1f) }
+    LaunchedEffect(temperatureValue) {
+        targetScale = 0.88f
+        targetScale = 1f
+    }
+    val animatedScale by animateFloatAsState(
+        targetValue = targetScale,
+        animationSpec = tween(durationMillis = 340, easing = FastOutSlowInEasing),
+        label = "tempScale"
+    )
+
     Box(
-        modifier = modifier,
+        modifier = modifier.graphicsLayer {
+            scaleX = animatedScale
+            scaleY = animatedScale
+        },
         contentAlignment = Alignment.Center
     ) {
-        // Render 3D Extrusion Bevel Shadow Layers
         val steps = 8
         for (i in steps downTo 1) {
             val offsetX = (extrusionDepthDp.value * (i.toFloat() / steps)).dp
             val offsetY = (extrusionDepthDp.value * (i.toFloat() / steps)).dp
-            
+
             Text(
                 text = tempString,
                 fontSize = fontSize,
@@ -47,7 +70,6 @@ fun ThreeDTemperatureText(
             )
         }
 
-        // Top Main Surface Text
         Text(
             text = tempString,
             fontSize = fontSize,

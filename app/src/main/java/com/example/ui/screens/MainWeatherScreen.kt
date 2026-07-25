@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocationOn
@@ -49,10 +51,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.WeatherForecastData
-import com.example.ui.components.ThreeDTemperatureText
+import com.example.ui.components.ThreeDDigitsRow
 import com.example.ui.components.ThreeDWeatherCanvas
 import com.example.ui.components.TimelineScrubber
 import com.example.ui.components.WeatherBackgroundShaderCanvas
+import com.example.ui.components.WeatherFooter
+import com.example.ui.components.rememberInteractive3DState
 import com.example.ui.viewmodel.TemperatureUnit
 import com.example.ui.viewmodel.WeatherUiState
 import com.example.util.rememberDropletFeedback
@@ -185,6 +189,7 @@ fun MainWeatherScreen(
                 val condition = currentHourly?.condition ?: data.condition
 
                 val (playFeedback, _) = rememberDropletFeedback()
+                val scrollState = rememberScrollState()
 
                 Box(modifier = Modifier.fillMaxSize()) {
                     // Background Particle Shader Canvas Layer behind giant typography
@@ -196,9 +201,10 @@ fun MainWeatherScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
+                            .verticalScroll(scrollState)
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.SpaceBetween
+                        verticalArrangement = Arrangement.Top
                     ) {
                         // Top Navigation Header Bar
                         Column(
@@ -334,38 +340,45 @@ fun MainWeatherScreen(
                             }
                         }
 
-                        // Hero 3D Weather Canvas
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            ThreeDWeatherCanvas(
-                                condition = condition,
-                                isDaytime = currentHourly?.isDaytime ?: true,
-                                modifier = Modifier.fillMaxSize(0.85f)
-                            )
-                        }
-
-                        // Giant 3D Brutalist Temperature & Condition Label
+                        // Hero 3D Weather + Temperature — sized for mobile screens
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                            modifier = Modifier.padding(vertical = 8.dp)
+                            verticalArrangement = Arrangement.spacedBy((-12).dp),
+                            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
                         ) {
-                            ThreeDTemperatureText(
-                                temperatureValue = displayedTemp,
-                                fontSize = 110.sp,
-                                color = primaryTextColor,
-                                shadowColor = if (themeMode == 1) Color(0xFFCC8F00) else Color(0xFFC7C7CC)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                ThreeDWeatherCanvas(
+                                    condition = condition,
+                                    isDaytime = currentHourly?.isDaytime ?: true,
+                                    modelScale = 1.35f,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+
+                            val tempInteraction = rememberInteractive3DState(
+                                initialPitch = 10f,
+                                autoSpinDegPerSec = 10f
+                            )
+                            ThreeDDigitsRow(
+                                number = displayedTemp,
+                                interactionState = tempInteraction,
+                                scaleToUnits = 1.55f,
+                                spacing = 1.05f,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(150.dp)
                             )
 
                             Text(
                                 text = condition.label,
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Black,
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = FontFamily.SansSerif,
                                 letterSpacing = 2.sp,
                                 color = primaryTextColor,
                                 modifier = Modifier.padding(top = 4.dp)
@@ -382,7 +395,9 @@ fun MainWeatherScreen(
                                 playFeedback()
                                 onHourSelected(idx)
                             },
-                            modifier = Modifier.testTag("timeline_scrubber")
+                            modifier = Modifier
+                                .padding(vertical = 16.dp)
+                                .testTag("timeline_scrubber")
                         )
 
                         // Pull / Click for Detailed Cards Button
@@ -393,7 +408,7 @@ fun MainWeatherScreen(
                                     playFeedback()
                                     onOpenDetailsCard()
                                 }
-                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
                                 .testTag("detailed_forecast_button"),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -413,6 +428,10 @@ fun MainWeatherScreen(
                                 color = if (themeMode == 1) Color(0xFF1C1C1E) else Color(0xFF8E8E93)
                             )
                         }
+
+                        WeatherFooter(
+                            textColor = primaryTextColor
+                        )
                     }
                 }
             }

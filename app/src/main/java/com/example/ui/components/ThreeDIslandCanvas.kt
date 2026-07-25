@@ -1,24 +1,17 @@
 package com.example.ui.components
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -26,222 +19,272 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalView
-import com.example.util.PianoSoundManager
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import kotlin.math.cos
+import kotlin.math.sin
+
+private data class IslandPoint3D(val x: Double, val y: Double, val z: Double)
+
+private data class IslandProjected(
+    val x: Float,
+    val y: Float,
+    val z: Float,
+    val scale: Float
+)
+
+private fun projectIsland(
+    p: IslandPoint3D,
+    rotXDeg: Float,
+    rotYDeg: Float,
+    centerX: Float,
+    centerY: Float,
+    perspective: Float = 520f
+): IslandProjected {
+    val radX = Math.toRadians(rotXDeg.toDouble())
+    val radY = Math.toRadians(rotYDeg.toDouble())
+
+    // Pitch
+    val y1 = p.y * cos(radX) - p.z * sin(radX)
+    val z1 = p.y * sin(radX) + p.z * cos(radX)
+    val x1 = p.x
+
+    // Yaw
+    val x2 = x1 * cos(radY) + z1 * sin(radY)
+    val z2 = -x1 * sin(radY) + z1 * cos(radY)
+    val y2 = y1
+
+    val depth = (perspective + z2).toFloat().coerceAtLeast(90f)
+    val scale = (perspective / depth).coerceIn(0.35f, 2.2f)
+    return IslandProjected(
+        x = centerX + (x2 * scale).toFloat(),
+        y = centerY + (y2 * scale).toFloat(),
+        z = z2.toFloat(),
+        scale = scale
+    )
+}
 
 @Composable
 fun ThreeDIslandCanvas(
     precipRateInches: Float,
     modifier: Modifier = Modifier
 ) {
-    val view = LocalView.current
-    val context = view.context.applicationContext
-    val soundManager = remember { PianoSoundManager(context) }
-    val scope = rememberCoroutineScope()
+    val interaction = rememberInteractive3DState(
+        initialPitch = 22f,
+        autoSpinDegPerSec = 12f,
+        maxPitch = 55f
+    )
 
     val infiniteTransition = rememberInfiniteTransition(label = "3DIslandAnimation")
 
-    // Floating animation for the 3D terrain island
     val floatY by infiniteTransition.animateFloat(
-        initialValue = -8f,
-        targetValue = 8f,
+        initialValue = -6f,
+        targetValue = 6f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2800, easing = FastOutSlowInEasing),
+            animation = tween(3000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "islandFloatY"
     )
 
-    // Raindrop falling progress (0f..1f)
     val rainProgress by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = androidx.compose.animation.core.LinearEasing),
+            animation = tween(1000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "rainProgress"
     )
 
-    var rotX by remember { mutableFloatStateOf(10f) }
-    var rotY by remember { mutableFloatStateOf(0f) }
-    var velX by remember { mutableFloatStateOf(0f) }
-    var velY by remember { mutableFloatStateOf(0f) }
-    var isDragging by remember { mutableStateOf(false) }
-
-    // Auto-rotation effect when not dragging
-    LaunchedEffect(isDragging) {
-        if (!isDragging) {
-            while (true) {
-                rotY += 0.3f
-                delay(16)
-            }
-        }
-    }
+    val rotX = interaction.pitch
+    val rotY = interaction.yaw
+    // Intensity of rain based on precip rate
+    val dropCount = (6 + (precipRateInches * 40f).toInt()).coerceIn(6, 22)
 
     Box(
-        modifier = modifier
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = {
-                        isDragging = true
-                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                        soundManager.playWaterDropletSound()
-                    },
-                    onDragEnd = {
-                        isDragging = false
-                        scope.launch {
-                            var currentVx = velX
-                            var currentVy = velY
-                            while (!isDragging && (kotlin.math.abs(currentVx) > 0.05f || kotlin.math.abs(currentVy) > 0.05f)) {
-                                rotY += currentVx
-                                rotX -= currentVy
-                                currentVx *= 0.94f
-                                currentVy *= 0.94f
-                                delay(16)
-                            }
-                        }
-                    },
-                    onDragCancel = { isDragging = false },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        velX = dragAmount.x * 0.4f
-                        velY = dragAmount.y * 0.4f
-                        rotY += velX
-                        rotX = (rotX - velY).coerceIn(-60f, 60f)
-                    }
-                )
-            }
-            .graphicsLayer {
-                rotationX = rotX
-                rotationY = rotY
-                cameraDistance = 16f * density
-            },
+        modifier = modifier.interactive3D(interaction, enablePitch = true),
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val center = Offset(size.width / 2f, size.height * 0.55f + floatY)
-            val islandWidth = size.width * 0.72f
-            val islandDepth = islandWidth * 0.38f
-            val islandHeight = islandWidth * 0.32f
+            val centerX = size.width / 2f
+            val centerY = size.height * 0.52f + floatY
+            val base = size.width.coerceAtMost(size.height) * 0.42f
 
-            // 1. Drop shadow beneath floating island
-            val shadowWidth = islandWidth * 0.95f
-            val shadowHeight = islandDepth * 0.8f
-            val shadowCenter = Offset(center.x, center.y + islandHeight * 0.95f)
-
+            // Drop shadow (projected under island)
+            val shadow = projectIsland(
+                IslandPoint3D(0.0, base * 0.55, 0.0),
+                rotX, rotY, centerX, centerY
+            )
             drawOval(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        Color.Black.copy(alpha = 0.30f),
-                        Color.Black.copy(alpha = 0.08f),
+                        Color.Black.copy(alpha = 0.28f),
+                        Color.Black.copy(alpha = 0.06f),
                         Color.Transparent
                     ),
-                    center = shadowCenter,
-                    radius = shadowWidth / 2f
+                    center = Offset(shadow.x, shadow.y),
+                    radius = base * 0.85f * shadow.scale
                 ),
-                topLeft = Offset(shadowCenter.x - shadowWidth / 2f, shadowCenter.y - shadowHeight / 2f),
-                size = Size(shadowWidth, shadowHeight)
+                topLeft = Offset(
+                    shadow.x - base * 0.85f * shadow.scale,
+                    shadow.y - base * 0.28f * shadow.scale
+                ),
+                size = Size(base * 1.7f * shadow.scale, base * 0.56f * shadow.scale)
             )
 
-            // 2. 3D Low-Poly Dark Terrain Bottom Body (Sculpted polygonal rocks)
-            val rockPath = Path().apply {
-                val leftX = center.x - islandWidth / 2f
-                val rightX = center.x + islandWidth / 2f
-                val topY = center.y
-                val bottomY = center.y + islandHeight
+            // Terrain mesh points (low-poly island) sorted by depth
+            data class Face(
+                val points: List<IslandPoint3D>,
+                val color: Color
+            )
 
-                moveTo(leftX, topY)
-                lineTo(leftX + islandWidth * 0.2f, bottomY * 0.92f)
-                lineTo(center.x - islandWidth * 0.1f, bottomY)
-                lineTo(center.x + islandWidth * 0.15f, bottomY * 0.96f)
-                lineTo(rightX - islandWidth * 0.15f, bottomY * 0.88f)
-                lineTo(rightX, topY)
-                close()
-            }
+            val halfW = base * 0.95
+            val halfD = base * 0.55
+            val height = base * 0.42
 
-            // Draw dark clay terrain mesh
-            drawPath(
-                path = rockPath,
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFF2C2C2E),
-                        Color(0xFF1C1C1E),
-                        Color(0xFF0F0F10)
+            val faces = listOf(
+                // Top pool surface (slightly raised)
+                Face(
+                    listOf(
+                        IslandPoint3D(-halfW * 0.75, -height * 0.15, -halfD * 0.7),
+                        IslandPoint3D(halfW * 0.75, -height * 0.15, -halfD * 0.7),
+                        IslandPoint3D(halfW * 0.7, -height * 0.15, halfD * 0.55),
+                        IslandPoint3D(-halfW * 0.7, -height * 0.15, halfD * 0.55)
                     ),
-                    start = Offset(center.x, center.y),
-                    end = Offset(center.x, center.y + islandHeight)
+                    Color(0xFF0A84FF)
+                ),
+                // Front cliff
+                Face(
+                    listOf(
+                        IslandPoint3D(-halfW * 0.7, -height * 0.15, halfD * 0.55),
+                        IslandPoint3D(halfW * 0.7, -height * 0.15, halfD * 0.55),
+                        IslandPoint3D(halfW * 0.55, height * 0.85, halfD * 0.35),
+                        IslandPoint3D(-halfW * 0.55, height * 0.85, halfD * 0.35)
+                    ),
+                    Color(0xFF2C2C2E)
+                ),
+                // Left cliff
+                Face(
+                    listOf(
+                        IslandPoint3D(-halfW * 0.75, -height * 0.15, -halfD * 0.7),
+                        IslandPoint3D(-halfW * 0.7, -height * 0.15, halfD * 0.55),
+                        IslandPoint3D(-halfW * 0.55, height * 0.85, halfD * 0.35),
+                        IslandPoint3D(-halfW * 0.6, height * 0.85, -halfD * 0.45)
+                    ),
+                    Color(0xFF1C1C1E)
+                ),
+                // Right cliff
+                Face(
+                    listOf(
+                        IslandPoint3D(halfW * 0.75, -height * 0.15, -halfD * 0.7),
+                        IslandPoint3D(halfW * 0.7, -height * 0.15, halfD * 0.55),
+                        IslandPoint3D(halfW * 0.55, height * 0.85, halfD * 0.35),
+                        IslandPoint3D(halfW * 0.6, height * 0.85, -halfD * 0.45)
+                    ),
+                    Color(0xFF3A3A3C)
+                ),
+                // Back cliff
+                Face(
+                    listOf(
+                        IslandPoint3D(-halfW * 0.75, -height * 0.15, -halfD * 0.7),
+                        IslandPoint3D(halfW * 0.75, -height * 0.15, -halfD * 0.7),
+                        IslandPoint3D(halfW * 0.6, height * 0.85, -halfD * 0.45),
+                        IslandPoint3D(-halfW * 0.6, height * 0.85, -halfD * 0.45)
+                    ),
+                    Color(0xFF48484A)
                 )
             )
 
-            // Poly facet wirelines for 3D geometric feel
+            val projectedFaces = faces.map { face ->
+                val projected = face.points.map { projectIsland(it, rotX, rotY, centerX, centerY) }
+                val avgZ = projected.map { it.z }.average().toFloat()
+                Triple(face, projected, avgZ)
+            }.sortedByDescending { it.third } // far faces first
+
+            projectedFaces.forEach { (face, projected, _) ->
+                val path = Path().apply {
+                    moveTo(projected[0].x, projected[0].y)
+                    projected.drop(1).forEach { lineTo(it.x, it.y) }
+                    close()
+                }
+                val avgScale = projected.map { it.scale }.average().toFloat()
+                // Lighting based on face depth / scale
+                val light = (0.55f + 0.45f * avgScale.coerceIn(0.5f, 1.2f)).coerceIn(0.4f, 1f)
+                val lit = Color(
+                    red = (face.color.red * light).coerceIn(0f, 1f),
+                    green = (face.color.green * light).coerceIn(0f, 1f),
+                    blue = (face.color.blue * light).coerceIn(0f, 1f),
+                    alpha = 1f
+                )
+                drawPath(path, lit)
+                drawPath(path, Color.White.copy(alpha = 0.08f), style = Stroke(width = 1.5f))
+            }
+
+            // Water surface highlight oval projected on top
+            val poolCorners = listOf(
+                IslandPoint3D(-halfW * 0.55, -height * 0.22, -halfD * 0.45),
+                IslandPoint3D(halfW * 0.55, -height * 0.22, -halfD * 0.45),
+                IslandPoint3D(halfW * 0.5, -height * 0.22, halfD * 0.35),
+                IslandPoint3D(-halfW * 0.5, -height * 0.22, halfD * 0.35)
+            ).map { projectIsland(it, rotX, rotY, centerX, centerY) }
+
+            val poolPath = Path().apply {
+                moveTo(poolCorners[0].x, poolCorners[0].y)
+                poolCorners.drop(1).forEach { lineTo(it.x, it.y) }
+                close()
+            }
             drawPath(
-                path = rockPath,
-                color = Color.White.copy(alpha = 0.08f),
-                style = Stroke(width = 2f)
-            )
-
-            // 3. Top Water Reservoir Plateau (Blue pool surface)
-            val poolTopY = center.y - islandDepth / 2f
-            val poolRect = Size(islandWidth, islandDepth)
-
-            drawOval(
+                path = poolPath,
                 brush = Brush.linearGradient(
                     colors = listOf(
+                        Color(0xFF64D2FF),
                         Color(0xFF007AFF),
-                        Color(0xFF30B0C7),
-                        Color(0xFF004080)
+                        Color(0xFF0040A0)
                     ),
-                    start = Offset(center.x - islandWidth / 2f, poolTopY),
-                    end = Offset(center.x + islandWidth / 2f, poolTopY + islandDepth)
-                ),
-                topLeft = Offset(center.x - islandWidth / 2f, poolTopY),
-                size = poolRect
+                    start = Offset(poolCorners[0].x, poolCorners[0].y),
+                    end = Offset(poolCorners[2].x, poolCorners[2].y)
+                )
+            )
+            drawPath(
+                path = poolPath,
+                color = Color(0xFF64D2FF).copy(alpha = 0.55f),
+                style = Stroke(width = 2.5f)
             )
 
-            // Water edge stroke highlight
-            drawOval(
-                color = Color(0xFF64D2FF).copy(alpha = 0.6f),
-                topLeft = Offset(center.x - islandWidth / 2f, poolTopY),
-                size = poolRect,
-                style = Stroke(width = 3f)
-            )
-
-            // 4. Falling Raindrops onto the Island Surface
-            val dropCount = 12
-            val rainStartTop = center.y - islandHeight * 1.8f
-            val rainEndBottom = poolTopY + islandDepth * 0.5f
-
+            // Raindrops in 3D space falling onto the island
             for (i in 0 until dropCount) {
-                val xPos = center.x + ((i * 31) % 180 - 90) * (islandWidth / 200f)
-                val phase = (rainProgress + (i * 0.11f)) % 1f
-                val currentY = rainStartTop + (phase * (rainEndBottom - rainStartTop))
+                val x = ((i * 37) % 160 - 80) / 100.0 * halfW
+                val z = ((i * 53) % 120 - 60) / 100.0 * halfD
+                val phase = (rainProgress + i * 0.09f) % 1f
+                val yStart = -height * 1.6
+                val yEnd = -height * 0.05
+                val y = yStart + (yEnd - yStart) * phase
 
-                if (currentY < rainEndBottom) {
-                    val dropLength = 24f
+                val dropTop = projectIsland(IslandPoint3D(x, y, z), rotX, rotY, centerX, centerY)
+                val dropBot = projectIsland(
+                    IslandPoint3D(x, y + height * 0.18, z),
+                    rotX, rotY, centerX, centerY
+                )
+
+                if (phase < 0.92f) {
                     drawLine(
-                        color = Color(0xFF64D2FF).copy(alpha = (0.3f + phase * 0.7f).coerceIn(0.2f, 0.95f)),
-                        start = Offset(xPos, currentY),
-                        end = Offset(xPos, currentY + dropLength),
-                        strokeWidth = 6f,
-                        cap = androidx.compose.ui.graphics.StrokeCap.Round
+                        color = Color(0xFF64D2FF).copy(alpha = (0.25f + phase * 0.7f).coerceIn(0.2f, 0.9f)),
+                        start = Offset(dropTop.x, dropTop.y),
+                        end = Offset(dropBot.x, dropBot.y),
+                        strokeWidth = 4.5f * dropTop.scale,
+                        cap = StrokeCap.Round
                     )
                 } else {
-                    // Water ripple impact ring on island
-                    val rippleR = (1f - (currentY - rainEndBottom) / 20f) * 16f
-                    if (rippleR > 0) {
-                        drawOval(
-                            color = Color(0xFF64D2FF).copy(alpha = 0.5f),
-                            topLeft = Offset(xPos - rippleR, rainEndBottom - rippleR * 0.4f),
-                            size = Size(rippleR * 2f, rippleR * 0.8f),
-                            style = Stroke(width = 2f)
-                        )
-                    }
+                    // Ripple on impact
+                    val ripple = ((phase - 0.92f) / 0.08f).coerceIn(0f, 1f)
+                    val r = 10f * ripple * dropTop.scale
+                    drawOval(
+                        color = Color(0xFF64D2FF).copy(alpha = (1f - ripple) * 0.55f),
+                        topLeft = Offset(dropBot.x - r, dropBot.y - r * 0.4f),
+                        size = Size(r * 2f, r * 0.8f),
+                        style = Stroke(width = 2f)
+                    )
                 }
             }
         }
