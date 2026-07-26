@@ -178,8 +178,12 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
         _selectedHourIndex.value = index
     }
 
-    fun refreshWeather() {
-        loadWeatherForSelectedCity()
+    /**
+     * @param showLoading when false, keep showing the last successful forecast while refreshing
+     * (used on app resume so the UI does not flash a full loading state).
+     */
+    fun refreshWeather(showLoading: Boolean = true) {
+        loadWeatherForSelectedCity(showLoading = showLoading)
     }
 
     fun updateSearchQuery(query: String) {
@@ -213,14 +217,17 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private fun loadWeatherForSelectedCity() {
-        loadWeatherForCity(_selectedCity.value)
+    private fun loadWeatherForSelectedCity(showLoading: Boolean = true) {
+        loadWeatherForCity(_selectedCity.value, showLoading = showLoading)
     }
 
-    private fun loadWeatherForCity(city: CityEntity) {
+    private fun loadWeatherForCity(city: CityEntity, showLoading: Boolean = true) {
         weatherJob?.cancel()
         weatherJob = viewModelScope.launch {
-            _weatherUiState.value = WeatherUiState.Loading
+            // Only blank the screen when we have nothing useful to show yet
+            if (showLoading || _weatherUiState.value !is WeatherUiState.Success) {
+                _weatherUiState.value = WeatherUiState.Loading
+            }
             try {
                 // Capture city at call time so a slow response cannot overwrite a newer selection
                 val data = repository.fetchWeather(city)
@@ -235,9 +242,12 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
                 }
             } catch (e: Exception) {
                 if (_selectedCity.value.id == city.id) {
-                    _weatherUiState.value = WeatherUiState.Error(
-                        e.localizedMessage ?: "Failed to load weather for ${city.name}"
-                    )
+                    // Keep prior Success if a background refresh fails
+                    if (_weatherUiState.value !is WeatherUiState.Success) {
+                        _weatherUiState.value = WeatherUiState.Error(
+                            e.localizedMessage ?: "Failed to load weather for ${city.name}"
+                        )
+                    }
                 }
             }
         }

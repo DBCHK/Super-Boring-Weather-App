@@ -54,7 +54,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -290,7 +289,8 @@ fun MainWeatherScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(scrollState)
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                            // Slightly less horizontal padding so hero 3D has room; text still padded below
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Top
                     ) {
@@ -445,81 +445,88 @@ fun MainWeatherScreen(
                                         quoteIndex = (quoteIndex + 1) % yellowQuotes.size
                                     }
                                 }
-                                Spacer(modifier = Modifier.height(28.dp))
+                                Spacer(modifier = Modifier.height(24.dp))
                                 Text(
                                     text = yellowQuotes[quoteIndex],
-                                    fontSize = 28.sp,
+                                    fontSize = 26.sp,
                                     fontWeight = FontWeight.Black,
                                     fontFamily = FontFamily.SansSerif,
                                     textAlign = TextAlign.Center,
                                     color = Color(0xFF1C1C1E),
-                                    letterSpacing = (-0.4).sp,
-                                    lineHeight = 34.sp,
-                                    modifier = Modifier.padding(horizontal = 12.dp)
+                                    letterSpacing = (-0.3).sp,
+                                    lineHeight = 32.sp,
+                                    // Full width + soft wrap so multi-line quotes never clip edges
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 8.dp)
                                 )
                             } else {
                                 Spacer(modifier = Modifier.height(20.dp))
                             }
                         }
 
-                        // Hero stick: weather on TOP, digits at BOTTOM of one rigid stick.
-                        // Shared pivot mid-column → pitch tips ends opposite ways; yaw swings as one body.
-                        Spacer(modifier = Modifier.height(if (themeMode == 1) 36.dp else 28.dp))
+                        // Hero stick in TRUE 3D (Filament): weather at top arm, digits at bottom arm.
+                        // Roomier viewports + moderate scale/arm so rotation never clips edges.
+                        Spacer(modifier = Modifier.height(if (themeMode == 1) 28.dp else 22.dp))
 
                         // Pitch allowed on Y-drag / tilt, but hard-capped (<90°) so never upside-down
                         val heroInteraction = rememberInteractive3DState(
                             initialPitch = 12f,
                             initialYaw = 0f,
-                            maxPitch = 52f,
-                            maxYaw = 36f,
+                            maxPitch = 48f,
+                            maxYaw = 32f,
                             autoSpinDegPerSec = 9f,
                             autoSpinOscillate = true
                         )
+                        // Shorter stick arm keeps orbit inside the frame while still reading as one stick
+                        val heroStickArm = 0.42f
 
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                // Extra horizontal room so yaw/pitch never clips left/right
+                                .padding(horizontal = 4.dp)
                                 .interactive3D(
                                     heroInteraction,
-                                    enablePitch = true, // vertical drag → stick pitch
-                                    enableDeviceTilt = true,
-                                    // Parent owns the stick transform; children stay local-upright
-                                    applyLayerRotation = true,
-                                    // Pivot between weather (top ~200dp) and digits (bottom ~200dp)
-                                    layerTransformOrigin = TransformOrigin(0.5f, 0.5f)
+                                    enablePitch = true,
+                                    enableDeviceTilt = true
                                 )
                         ) {
                             ThreeDWeatherCanvas(
                                 condition = condition,
                                 isDaytime = currentHourly?.isDaytime ?: true,
-                                modelScale = 2.15f,
+                                // Slightly smaller scale + taller box = no top/bottom crop
+                                modelScale = 1.72f,
                                 tintColor = if (palette.isDark) Color(0xFFF2F2F7) else Color(0xFF2C2C2E),
                                 shadeColor = if (palette.isDark) Color(0xFFC7C7CC) else Color(0xFF636366),
                                 interactionState = heroInteraction,
                                 enableGestures = false,
-                                applyInteractionRotation = false,
+                                applyInteractionRotation = true,
+                                stickArmY = heroStickArm, // top of stick
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(200.dp)
+                                    .height(230.dp)
                             )
 
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
 
                             ThreeDDigitsRow(
                                 number = displayedTemp,
                                 interactionState = heroInteraction,
-                                scaleToUnits = 2.20f,
-                                spacing = 1.08f,
+                                scaleToUnits = 1.85f,
+                                // Closer digits
+                                spacing = 0.72f,
                                 fillColor = palette.elementFill,
                                 shadeColor = palette.elementShade,
                                 shadowColor = palette.elementShadow,
                                 highlightColor = palette.elementHighlight,
                                 enableGestures = false,
-                                applyInteractionRotation = false,
+                                applyInteractionRotation = true,
+                                stickArmY = -heroStickArm, // bottom of stick
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(200.dp)
+                                    .height(230.dp)
                             )
                         }
 

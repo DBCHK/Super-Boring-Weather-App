@@ -43,10 +43,13 @@ fun ThreeDDigitsRow(
     /** When false, parent owns drag/tilt so weather + digits move together. */
     enableGestures: Boolean = true,
     /**
-     * When false, digits stay fixed in local space; parent stick layer provides the motion
-     * (digits sit at the bottom of the stick, weather at the top).
+     * When false, digits do not self-rotate. Prefer true for real Filament 3D depth.
      */
-    applyInteractionRotation: Boolean = true
+    applyInteractionRotation: Boolean = true,
+    /**
+     * Signed stick arm for rigid hero motion (− = bottom of stick). Orbits in 3D with pitch/yaw.
+     */
+    stickArmY: Float = 0f
 ) {
     val engine = rememberEngine()
     val modelLoader = rememberModelLoader(engine)
@@ -82,9 +85,10 @@ fun ThreeDDigitsRow(
         }
     }
 
-    // Local model rotation — zero when parent owns rigid stick transform
+    // True 3D rotation + rigid stick orbit in Filament (not flat Compose layer tilt)
     val yaw = if (applyInteractionRotation) interactionState.renderYaw else 0f
     val pitch = if (applyInteractionRotation) interactionState.renderPitch else 0f
+    val stick = stickRigidDelta(pitch, yaw, stickArmY)
 
     Box(
         modifier = if (enableGestures) {
@@ -98,17 +102,18 @@ fun ThreeDDigitsRow(
         },
         contentAlignment = Alignment.Center
     ) {
-        // Soft ground shadow for depth / readability
+        // Soft ground shadow — shifts with yaw so it reads as 3D contact
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val cx = size.width / 2f
-            val cy = size.height * 0.78f
-            val shadowW = size.width * 0.38f
-            val shadowH = size.height * 0.10f
+            val cx = size.width / 2f + yaw * 1.1f
+            val cy = size.height * 0.78f + pitch * 0.35f
+            val depthScale = (1f - stick.z * 0.12f).coerceIn(0.82f, 1.15f)
+            val shadowW = size.width * 0.38f * depthScale
+            val shadowH = size.height * 0.10f * depthScale
             drawOval(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        shadowColor.copy(alpha = 0.40f),
-                        shadowColor.copy(alpha = 0.10f),
+                        shadowColor.copy(alpha = 0.42f),
+                        shadowColor.copy(alpha = 0.12f),
                         Color.Transparent
                     ),
                     center = Offset(cx + 4f, cy + 2f),
@@ -130,16 +135,17 @@ fun ThreeDDigitsRow(
             renderQuality = RenderQuality.Default,
             surfaceType = SurfaceType.TextureSurface
         ) {
-            // Stable lighting — no per-frame tint
+            // Key — sculpts digit volume
             LightNode(
                 type = LightManager.Type.DIRECTIONAL,
-                intensity = 95_000f,
+                intensity = 120_000f,
                 color = colorOf(Color.White),
-                direction = Direction(0.35f, -1f, -0.55f)
+                direction = Direction(0.45f, -1f, -0.65f)
             )
+            // Fill
             LightNode(
                 type = LightManager.Type.DIRECTIONAL,
-                intensity = 36_000f,
+                intensity = 44_000f,
                 color = colorOf(
                     Color(
                         highlightColor.red.coerceAtLeast(0.55f),
@@ -147,7 +153,14 @@ fun ThreeDDigitsRow(
                         highlightColor.blue.coerceAtLeast(0.62f)
                     )
                 ),
-                direction = Direction(-0.55f, -0.25f, 0.45f)
+                direction = Direction(-0.65f, -0.25f, 0.40f)
+            )
+            // Rim — edge light for clear 3D silhouette while rotating
+            LightNode(
+                type = LightManager.Type.DIRECTIONAL,
+                intensity = 52_000f,
+                color = colorOf(Color(0.95f, 0.96f, 1f)),
+                direction = Direction(-0.1f, 0.2f, 1f)
             )
 
             val totalWidth = (digits.size - 1) * spacing
@@ -158,7 +171,11 @@ fun ThreeDDigitsRow(
                     ModelNode(
                         modelInstance = instance,
                         scaleToUnits = scaleToUnits,
-                        position = Position(x = startX + index * spacing),
+                        position = Position(
+                            x = startX + index * spacing + stick.x,
+                            y = stick.y,
+                            z = stick.z
+                        ),
                         rotation = Rotation(
                             x = pitch,
                             y = yaw,

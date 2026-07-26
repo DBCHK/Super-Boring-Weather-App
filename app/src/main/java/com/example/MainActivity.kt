@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,6 +41,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.screens.CitySelectionSheet
 import com.example.ui.screens.DetailedForecastScreen
@@ -142,7 +146,7 @@ fun NotBoringWeatherApp(
         }
     }
 
-    // Auto-detect on launch only if permission + services are available
+    // Auto-detect on first composition only if permission + services are available
     LaunchedEffect(Unit) {
         val hasFine = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_FINE_LOCATION
@@ -152,7 +156,23 @@ fun NotBoringWeatherApp(
         ) == PackageManager.PERMISSION_GRANTED
         if ((hasFine || hasCoarse) && locationHelper.isLocationServicesEnabled()) {
             viewModel.detectUserLocationResult()
+        } else {
+            // No location path — still pull a fresh forecast for the selected city
+            viewModel.refreshWeather(showLoading = true)
         }
+    }
+
+    // Every time the user opens / returns to the app, refresh live weather
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                // Silent refresh so the UI does not flash Loading over existing data
+                viewModel.refreshWeather(showLoading = false)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     if (showLocationServicesDialog) {

@@ -98,10 +98,13 @@ fun ThreeDWeatherCanvas(
     /** When false, parent owns drag/tilt gestures (linked group). */
     enableGestures: Boolean = true,
     /**
-     * When false, model stays upright in local space; parent layer provides stick rotation
-     * (weather at top of stick, digits at bottom — one rigid body).
+     * When false, model does not self-rotate (rare). Prefer true for real Filament 3D depth.
      */
-    applyInteractionRotation: Boolean = true
+    applyInteractionRotation: Boolean = true,
+    /**
+     * Signed stick arm for rigid hero motion (+ = top of stick). Orbits in 3D with pitch/yaw.
+     */
+    stickArmY: Float = 0f
 ) {
     val ownedInteraction = rememberInteractive3DState(
         initialPitch = 14f,
@@ -132,7 +135,7 @@ fun ThreeDWeatherCanvas(
         label = "pulseProgress"
     )
 
-    // Local model/overlay rotation — zero when parent owns rigid stick transform
+    // True 3D rotation from shared interaction (drives mesh + overlays)
     val currentRotX = if (applyInteractionRotation) interaction.renderPitch else 0f
     val currentRotY = if (applyInteractionRotation) interaction.renderYaw else 0f
 
@@ -177,6 +180,7 @@ fun ThreeDWeatherCanvas(
             tintColor = resolvedFill,
             shadeColor = resolvedShade,
             applyInteractionRotation = applyInteractionRotation,
+            stickArmY = stickArmY,
             modifier = Modifier.fillMaxSize()
         )
 

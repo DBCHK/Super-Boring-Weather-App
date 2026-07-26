@@ -22,6 +22,36 @@ import io.github.sceneview.rememberModelInstance
 import io.github.sceneview.rememberModelLoader
 import io.github.sceneview.rememberRenderer
 import io.github.sceneview.rememberView
+import kotlin.math.cos
+import kotlin.math.sin
+
+/**
+ * Rigid-stick offset in model space: end sits at local (0, [stickArmY], 0) on a stick
+ * pivoted at the origin. Returns delta from that rest pose so models stay framed at rest
+ * but orbit in true 3D (Z depth) as pitch/yaw change.
+ *
+ * @param stickArmY + for top of stick (weather), − for bottom (digits).
+ */
+fun stickRigidDelta(
+    pitchDeg: Float,
+    yawDeg: Float,
+    stickArmY: Float
+): Position {
+    if (stickArmY == 0f) return Position(0f)
+    val pitch = Math.toRadians(pitchDeg.toDouble())
+    val yaw = Math.toRadians(yawDeg.toDouble())
+    // Rest local: (0, stickArmY, 0). Apply pitch (X) then yaw (Y).
+    val y1 = stickArmY * cos(pitch)
+    val z1 = stickArmY * sin(pitch)
+    val x2 = z1 * sin(yaw)
+    val z2 = z1 * cos(yaw)
+    val y2 = y1
+    return Position(
+        x = x2.toFloat(),
+        y = (y2 - stickArmY).toFloat(),
+        z = z2.toFloat()
+    )
+}
 
 @Composable
 fun GlbModelRenderer(
@@ -36,10 +66,15 @@ fun GlbModelRenderer(
     /** When true, add directional lights so models show depth/shading. */
     enableLighting: Boolean = true,
     /**
-     * When false, model stays fixed relative to its parent (parent owns stick / layer rotation).
-     * Avoids double-applying pitch/yaw on linked hero groups.
+     * When false, model stays fixed relative to its parent.
+     * Prefer true so Filament rotates the mesh (real 3D depth + lighting).
      */
-    applyInteractionRotation: Boolean = true
+    applyInteractionRotation: Boolean = true,
+    /**
+     * Signed arm length along the hero stick (+ top / weather, − bottom / digits).
+     * Combined with pitch/yaw for true 3D rigid-body orbit (not flat layer tilt).
+     */
+    stickArmY: Float = 0f
 ) {
     val engine = rememberEngine()
     val modelLoader = rememberModelLoader(engine)
@@ -66,6 +101,11 @@ fun GlbModelRenderer(
         modelInstance?.applyThemeTint(tintColor, shadeColor)
     }
 
+    // Read each frame so ModelNode pitch/yaw/position update in Filament (true 3D)
+    val rotX = if (applyInteractionRotation) interactionState.renderPitch else 0f
+    val rotY = if (applyInteractionRotation) interactionState.renderYaw else 0f
+    val stick = stickRigidDelta(rotX, rotY, stickArmY)
+
     SceneView(
         modifier = modifier.fillMaxSize(),
         engine = engine,
@@ -74,33 +114,43 @@ fun GlbModelRenderer(
         view = view,
         environment = environment,
         isOpaque = false,
-        renderQuality = RenderQuality.Performance,
+        // Default quality: better shading / depth on hero models
+        renderQuality = RenderQuality.Default,
         surfaceType = SurfaceType.TextureSurface
     ) {
         if (enableLighting) {
-            // Key light — sculpts form
+            // Key light — sculpts form from upper-front
             LightNode(
                 type = LightManager.Type.DIRECTIONAL,
-                intensity = 95_000f,
-                color = colorOf(Color(1f, 0.98f, 0.95f)),
-                direction = Direction(0.35f, -1f, -0.55f)
+                intensity = 120_000f,
+                color = colorOf(Color(1f, 0.98f, 0.94f)),
+                direction = Direction(0.45f, -1f, -0.65f)
             )
-            // Soft fill — readable shadows, not pure black
+            // Cool fill — opens shadows so volume reads
             LightNode(
                 type = LightManager.Type.DIRECTIONAL,
-                intensity = 38_000f,
-                color = colorOf(Color(0.75f, 0.82f, 1f)),
-                direction = Direction(-0.55f, -0.35f, 0.4f)
+                intensity = 48_000f,
+                color = colorOf(Color(0.72f, 0.80f, 1f)),
+                direction = Direction(-0.65f, -0.25f, 0.35f)
+            )
+            // Rim / back light — edge highlight = clear 3D silhouette
+            LightNode(
+                type = LightManager.Type.DIRECTIONAL,
+                intensity = 55_000f,
+                color = colorOf(Color(1f, 0.97f, 0.92f)),
+                direction = Direction(-0.15f, 0.25f, 1f)
             )
         }
 
         modelInstance?.let { instance ->
-            val rotX = if (applyInteractionRotation) interactionState.renderPitch else 0f
-            val rotY = if (applyInteractionRotation) interactionState.renderYaw else 0f
             ModelNode(
                 modelInstance = instance,
                 scaleToUnits = scaleToUnits,
-                position = Position(y = offsetY),
+                position = Position(
+                    x = stick.x,
+                    y = offsetY + stick.y,
+                    z = stick.z
+                ),
                 rotation = Rotation(
                     x = rotX,
                     y = rotY,
