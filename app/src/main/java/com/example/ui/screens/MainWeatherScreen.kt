@@ -13,6 +13,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,8 +49,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,7 +60,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -66,12 +70,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.WeatherCondition
+import com.example.ui.components.ConfettiBurst
+import com.example.ui.components.DailyGlanceRow
+import com.example.ui.components.HourlyForecastStrip
+import com.example.ui.components.NotBoringCopy
 import com.example.ui.components.ThreeDDigitsRow
 import com.example.ui.components.ThreeDWeatherCanvas
 import com.example.ui.components.TimelineScrubber
+import com.example.ui.components.VibeMeterCard
 import com.example.ui.components.WeatherBackgroundShaderCanvas
 import com.example.ui.components.WeatherFooter
+import com.example.ui.components.WeatherStoryCard
 import com.example.ui.components.bouncyClick
+import com.example.ui.components.conditionEmoji
 import com.example.ui.components.entrance
 import com.example.ui.components.interactive3D
 import com.example.ui.components.rememberEntranceProgress
@@ -81,6 +92,7 @@ import com.example.ui.theme.ThemePalette
 import com.example.ui.viewmodel.TemperatureUnit
 import com.example.ui.viewmodel.WeatherUiState
 import com.example.util.rememberDropletPlayers
+import java.util.Calendar
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
@@ -245,9 +257,23 @@ fun MainWeatherScreen(
                 val playFeedback = feedback.tap
                 val scrollState = rememberScrollState()
                 var swipeUpAccum by remember { mutableFloatStateOf(0f) }
+                var showConfetti by remember { mutableStateOf(false) }
+                var shareToast by remember { mutableStateOf(false) }
+                val clipboard = LocalClipboardManager.current
                 val heroEnter = rememberEntranceProgress(delayMs = 40, durationMs = 560)
                 val chipsEnter = rememberEntranceProgress(delayMs = 180, durationMs = 520)
                 val scrubEnter = rememberEntranceProgress(delayMs = 280, durationMs = 520)
+                val featuresEnter = rememberEntranceProgress(delayMs = 360, durationMs = 560)
+                val greeting = remember {
+                    NotBoringCopy.dayPartGreeting(
+                        Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                    )
+                }
+                val tempCForCopy = if (temperatureUnit == TemperatureUnit.CELSIUS) {
+                    displayedTemp.toFloat()
+                } else {
+                    (displayedTemp - 32) * 5f / 9f
+                }
 
                 // Subtle bounce on the "swipe up" chevron
                 val chevronBob by rememberInfiniteTransition(label = "chevron").animateFloat(
@@ -296,11 +322,16 @@ fun MainWeatherScreen(
                         modifier = Modifier.fillMaxSize()
                     )
 
+                    // Confetti celebration layer
+                    ConfettiBurst(
+                        active = showConfetti,
+                        onFinished = { showConfetti = false }
+                    )
+
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(scrollState)
-                            // Slightly less horizontal padding so hero 3D has room; text still padded below
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Top
@@ -314,10 +345,24 @@ fun MainWeatherScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.fillMaxWidth()
                         ) {
+                            // Daypart greeting
+                            Text(
+                                text = "$greeting · ${data.cityName}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 0.4.sp,
+                                color = palette.secondaryText,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp, start = 4.dp, end = 4.dp),
+                                textAlign = TextAlign.Start
+                            )
+
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 8.dp, start = 4.dp, end = 4.dp),
+                                    .padding(top = 6.dp, start = 4.dp, end = 4.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -394,6 +439,33 @@ fun MainWeatherScreen(
                                         Icon(
                                             imageVector = Icons.Default.Palette,
                                             contentDescription = "Toggle Theme",
+                                            tint = chromeFg,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+
+                                    // Share / copy snapshot
+                                    Box(
+                                        modifier = Modifier
+                                            .size(26.dp)
+                                            .clip(CircleShape)
+                                            .background(chromeBg)
+                                            .bouncyClick {
+                                                feedback.chime()
+                                                val unit = if (temperatureUnit == TemperatureUnit.CELSIUS) "C" else "F"
+                                                val blurb =
+                                                    "${data.cityName}: $displayedTemp°$unit · " +
+                                                        "${condition.label} ${conditionEmoji(condition)} · " +
+                                                        "H $highTemp° L $lowTemp° · via BORING WEATHER"
+                                                clipboard.setText(AnnotatedString(blurb))
+                                                shareToast = true
+                                            }
+                                            .testTag("share_weather_button"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Share,
+                                            contentDescription = "Copy forecast",
                                             tint = chromeFg,
                                             modifier = Modifier.size(12.dp)
                                         )
@@ -501,6 +573,15 @@ fun MainWeatherScreen(
                                         enablePitch = true,
                                         enableDeviceTilt = true
                                     )
+                                    // Double-tap hero = confetti celebration (Not Boring easter egg)
+                                    .pointerInput(Unit) {
+                                        detectTapGestures(
+                                            onDoubleTap = {
+                                                feedback.splash()
+                                                showConfetti = true
+                                            }
+                                        )
+                                    }
                             ) {
                                 ThreeDWeatherCanvas(
                                     condition = condition,
@@ -539,6 +620,27 @@ fun MainWeatherScreen(
                                         .offset(y = (-22).dp)
                                 )
                             }
+                        }
+
+                        LaunchedEffect(shareToast) {
+                            if (shareToast) {
+                                delay(1800)
+                                shareToast = false
+                            }
+                        }
+                        AnimatedVisibility(
+                            visible = shareToast,
+                            enter = fadeIn(),
+                            exit = fadeOut()
+                        ) {
+                            Text(
+                                text = "COPIED FORECAST ✓",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black,
+                                fontFamily = FontFamily.Monospace,
+                                color = palette.accent,
+                                modifier = Modifier.padding(top = 6.dp)
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(2.dp))
@@ -628,7 +730,78 @@ fun MainWeatherScreen(
                                 .testTag("timeline_scrubber")
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // ── Not Boring feature stack ──────────────────────────
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .entrance(featuresEnter, risePx = 32f),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            HourlyForecastStrip(
+                                hours = hourly,
+                                selectedIndex = selectedHourIndex,
+                                temperatureUnit = temperatureUnit,
+                                onHourSelected = onHourSelected
+                            )
+
+                            VibeMeterCard(
+                                tempC = tempCForCopy,
+                                humidity = humidity,
+                                windMph = currentHourly?.windSpeedMph ?: data.windSpeedMph,
+                                precipChance = rain,
+                                uv = currentHourly?.uvIndex ?: data.uvIndex,
+                                condition = condition
+                            )
+
+                            WeatherStoryCard(
+                                condition = condition,
+                                tempC = tempCForCopy,
+                                humidity = humidity,
+                                precipChance = rain,
+                                windMph = currentHourly?.windSpeedMph ?: data.windSpeedMph
+                            )
+
+                            DailyGlanceRow(
+                                days = data.dailyList,
+                                temperatureUnit = temperatureUnit,
+                                onDayTap = {
+                                    feedback.whooshUp()
+                                    onOpenDetailsCard()
+                                }
+                            )
+
+                            // Fun fact strip
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(palette.chipBg)
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(text = conditionEmoji(condition), fontSize = 22.sp)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "AQI ${data.airQualityIndex} · ${aqiShort(data.airQualityIndex)}",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Black,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = palette.primaryText
+                                    )
+                                    Text(
+                                        text = "Double-tap the hero for confetti. Share copies your forecast.",
+                                        fontSize = 11.sp,
+                                        color = palette.secondaryText,
+                                        lineHeight = 15.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
 
                         // Swipe-up affordance (creative sheet cue)
                         Column(
@@ -783,6 +956,13 @@ private fun conditionGlowColor(condition: WeatherCondition, isDark: Boolean): Co
         else ->
             if (isDark) Color(0xFF8E8E93) else Color(0xFF636366)
     }
+}
+
+private fun aqiShort(aqi: Int): String = when {
+    aqi <= 50 -> "GOOD AIR"
+    aqi <= 100 -> "OK AIR"
+    aqi <= 150 -> "MEH AIR"
+    else -> "ROUGH AIR"
 }
 
 /** Playful one-liner from temp + humidity + wind. */

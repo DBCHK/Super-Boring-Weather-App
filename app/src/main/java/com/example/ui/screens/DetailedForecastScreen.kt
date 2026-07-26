@@ -75,7 +75,11 @@ import com.example.ui.components.ThreeDWeatherCanvas
 import com.example.ui.components.UvMeterCanvas
 import com.example.ui.components.WeeklyPrecipGraphCanvas
 import com.example.ui.components.WindCompassCanvas
+import com.example.ui.components.NotBoringCopy
+import com.example.ui.components.VibeMeterCard
 import com.example.ui.components.WeatherFooter
+import com.example.ui.components.WeatherStoryCard
+import com.example.ui.components.conditionEmoji
 import com.example.ui.components.formatPrecipInches
 import com.example.ui.theme.LocalThemePalette
 import com.example.ui.viewmodel.TemperatureUnit
@@ -85,6 +89,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private val DetailTabs = listOf(
+    "TODAY" to "tab_today",
     "PRECIP" to "tab_precip",
     "MOON" to "tab_moon",
     "ALERTS" to "tab_alerts",
@@ -319,7 +324,12 @@ fun DetailedForecastScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     when (page) {
-                        0 -> PrecipTabContent(
+                        0 -> TodayTabContent(
+                            data = data,
+                            selectedHourIndex = selectedHourIndex,
+                            temperatureUnit = temperatureUnit
+                        )
+                        1 -> PrecipTabContent(
                             data = data,
                             selectedHourIndex = selectedHourIndex,
                             selectedDayIndex = selectedDayIndex.coerceIn(
@@ -332,16 +342,16 @@ fun DetailedForecastScreen(
                             onWeekModeChange = { isWeekMode = it },
                             playFeedback = playFeedback
                         )
-                        1 -> MoonPhaseView(data = data)
-                        2 -> SevereWeatherAlertView(data = data, playFeedback = playFeedback)
-                        3 -> WindTabContent(
+                        2 -> MoonPhaseView(data = data)
+                        3 -> SevereWeatherAlertView(data = data, playFeedback = playFeedback)
+                        4 -> WindTabContent(
                             data = data,
                             selectedHourIndex = selectedHourIndex,
                             isWeekMode = isWeekMode,
                             onWeekModeChange = { isWeekMode = it },
                             playFeedback = playFeedback
                         )
-                        4 -> UvAirTabContent(
+                        5 -> UvAirTabContent(
                             data = data,
                             selectedHourIndex = selectedHourIndex,
                             selectedDayIndex = selectedDayIndex.coerceIn(
@@ -353,7 +363,7 @@ fun DetailedForecastScreen(
                             onDaySelected = { selectedDayIndex = it },
                             playFeedback = playFeedback
                         )
-                        5 -> SevenDayTabContent(
+                        6 -> SevenDayTabContent(
                             data = data,
                             temperatureUnit = temperatureUnit,
                             selectedDayIndex = selectedDayIndex.coerceIn(
@@ -371,6 +381,81 @@ fun DetailedForecastScreen(
                 }
             }
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TODAY TAB — glanceable story + vibe (Not Boring energy)
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun TodayTabContent(
+    data: WeatherForecastData,
+    selectedHourIndex: Int,
+    temperatureUnit: TemperatureUnit
+) {
+    val hour = data.hourlyList.getOrNull(selectedHourIndex) ?: data.hourlyList.firstOrNull()
+    val tempC = hour?.tempC ?: data.currentTempC
+    val displayTemp = if (temperatureUnit == TemperatureUnit.CELSIUS) {
+        tempC.roundToInt()
+    } else {
+        (hour?.tempF ?: data.currentTempF).roundToInt()
+    }
+    val condition = hour?.condition ?: data.condition
+    val humidity = hour?.humidityPercent ?: data.humidityPercent
+    val wind = hour?.windSpeedMph ?: data.windSpeedMph
+    val precip = hour?.precipChancePercent ?: data.precipChancePercent
+    val uv = hour?.uvIndex ?: data.uvIndex
+    val palette = LocalThemePalette.current
+
+    Spacer(modifier = Modifier.height(8.dp))
+    Text(
+        text = "${conditionEmoji(condition)}  $displayTemp°  ·  ${condition.label}",
+        fontSize = 22.sp,
+        fontWeight = FontWeight.Black,
+        color = palette.primaryText,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 6.dp)
+    )
+    Text(
+        text = NotBoringCopy.dayPartGreeting() + " in ${data.cityName}",
+        fontSize = 13.sp,
+        fontFamily = FontFamily.Monospace,
+        color = palette.secondaryText,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 14.dp)
+    )
+    VibeMeterCard(
+        tempC = tempC,
+        humidity = humidity,
+        windMph = wind,
+        precipChance = precip,
+        uv = uv,
+        condition = condition
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+    WeatherStoryCard(
+        condition = condition,
+        tempC = tempC,
+        humidity = humidity,
+        precipChance = precip,
+        windMph = wind
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+    MetricCard {
+        MetricRow(label = "FEELS", value = "${displayTemp}°")
+        MetricDivider()
+        MetricRow(label = "HUMIDITY", value = "$humidity%")
+        MetricDivider()
+        MetricRow(label = "WIND", value = "${wind.roundToInt()} mph")
+        MetricDivider()
+        MetricRow(label = "RAIN", value = "$precip%")
+        MetricDivider()
+        MetricRow(label = "UV", value = "${uv.roundToInt()}")
+        MetricDivider()
+        MetricRow(label = "AQI", value = "${data.airQualityIndex}")
     }
 }
 
