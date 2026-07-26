@@ -29,13 +29,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -48,7 +51,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.screens.CitySelectionSheet
 import com.example.ui.screens.DetailedForecastScreen
 import com.example.ui.screens.MainWeatherScreen
+import com.example.ui.theme.AppThemeMode
+import com.example.ui.theme.LocalAppThemeMode
+import com.example.ui.theme.LocalThemePalette
 import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.ThemePalette
 import com.example.ui.viewmodel.WeatherUiState
 import com.example.ui.viewmodel.WeatherViewModel
 import com.example.util.LocationHelper
@@ -80,6 +87,16 @@ fun NotBoringWeatherApp(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
+    val lastRefreshAtMs by viewModel.lastRefreshAtMs.collectAsState()
+
+    // 0 Light · 1 Yellow · 2 Dark — shared across home, details, city sheet
+    var themeMode by rememberSaveable { mutableIntStateOf(1) }
+    val appTheme = when (themeMode) {
+        1 -> AppThemeMode.YELLOW
+        2 -> AppThemeMode.DARK
+        else -> AppThemeMode.LIGHT
+    }
+    val palette = ThemePalette.forMode(appTheme)
 
     var showDetailsScreen by remember { mutableStateOf(false) }
     var showCitySheet by remember { mutableStateOf(false) }
@@ -204,73 +221,81 @@ fun NotBoringWeatherApp(
         )
     }
 
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            MainWeatherScreen(
-                weatherUiState = weatherUiState,
-                selectedHourIndex = selectedHourIndex,
-                temperatureUnit = temperatureUnit,
-                onHourSelected = { viewModel.setSelectedHourIndex(it) },
-                onToggleUnit = { viewModel.toggleTemperatureUnit() },
-                onOpenCitySheet = { showCitySheet = true },
-                onOpenDetailsCard = { showDetailsScreen = true },
-                onDetectLocation = { runDetect() },
-                onRefresh = { viewModel.refreshWeather() }
-            )
-
-            AnimatedVisibility(
-                visible = showDetailsScreen,
-                enter = slideInVertically(
-                    initialOffsetY = { full -> full },
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    )
-                ) + fadeIn(animationSpec = tween(220)),
-                exit = slideOutVertically(
-                    targetOffsetY = { full -> full },
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMedium
-                    )
-                ) + fadeOut(animationSpec = tween(180)),
+    CompositionLocalProvider(
+        LocalThemePalette provides palette,
+        LocalAppThemeMode provides appTheme
+    ) {
+        Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .zIndex(10f)
+                    .padding(innerPadding)
             ) {
-                if (weatherUiState is WeatherUiState.Success) {
-                    DetailedForecastScreen(
-                        data = (weatherUiState as WeatherUiState.Success).data,
-                        selectedHourIndex = selectedHourIndex,
-                        temperatureUnit = temperatureUnit,
-                        onHourSelected = { viewModel.setSelectedHourIndex(it) },
-                        onClose = { showDetailsScreen = false }
+                MainWeatherScreen(
+                    weatherUiState = weatherUiState,
+                    selectedHourIndex = selectedHourIndex,
+                    temperatureUnit = temperatureUnit,
+                    themeMode = themeMode,
+                    onThemeModeChange = { themeMode = it },
+                    lastRefreshAtMs = lastRefreshAtMs,
+                    onHourSelected = { viewModel.setSelectedHourIndex(it) },
+                    onToggleUnit = { viewModel.toggleTemperatureUnit() },
+                    onOpenCitySheet = { showCitySheet = true },
+                    onOpenDetailsCard = { showDetailsScreen = true },
+                    onDetectLocation = { runDetect() },
+                    onRefresh = { viewModel.refreshWeather() }
+                )
+
+                AnimatedVisibility(
+                    visible = showDetailsScreen,
+                    enter = slideInVertically(
+                        initialOffsetY = { full -> full },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    ) + fadeIn(animationSpec = tween(220)),
+                    exit = slideOutVertically(
+                        targetOffsetY = { full -> full },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        )
+                    ) + fadeOut(animationSpec = tween(180)),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(10f)
+                ) {
+                    if (weatherUiState is WeatherUiState.Success) {
+                        DetailedForecastScreen(
+                            data = (weatherUiState as WeatherUiState.Success).data,
+                            selectedHourIndex = selectedHourIndex,
+                            temperatureUnit = temperatureUnit,
+                            onHourSelected = { viewModel.setSelectedHourIndex(it) },
+                            onClose = { showDetailsScreen = false }
+                        )
+                    }
+                }
+
+                if (showCitySheet) {
+                    CitySelectionSheet(
+                        sheetState = sheetState,
+                        savedCities = savedCities,
+                        selectedCity = selectedCity,
+                        searchQuery = searchQuery,
+                        searchResults = searchResults,
+                        isSearching = isSearching,
+                        onQueryChange = { viewModel.updateSearchQuery(it) },
+                        onSelectCity = { viewModel.selectCity(it) },
+                        onSaveCity = { viewModel.saveCity(it) },
+                        onDeleteCity = { viewModel.deleteCity(it) },
+                        onDetectLocation = { runDetect() },
+                        onDismiss = {
+                            viewModel.updateSearchQuery("")
+                            showCitySheet = false
+                        }
                     )
                 }
-            }
-
-            if (showCitySheet) {
-                CitySelectionSheet(
-                    sheetState = sheetState,
-                    savedCities = savedCities,
-                    selectedCity = selectedCity,
-                    searchQuery = searchQuery,
-                    searchResults = searchResults,
-                    isSearching = isSearching,
-                    onQueryChange = { viewModel.updateSearchQuery(it) },
-                    onSelectCity = { viewModel.selectCity(it) },
-                    onSaveCity = { viewModel.saveCity(it) },
-                    onDeleteCity = { viewModel.deleteCity(it) },
-                    onDetectLocation = { runDetect() },
-                    onDismiss = {
-                        viewModel.updateSearchQuery("")
-                        showCitySheet = false
-                    }
-                )
             }
         }
     }

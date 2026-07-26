@@ -77,6 +77,7 @@ import com.example.ui.components.WeeklyPrecipGraphCanvas
 import com.example.ui.components.WindCompassCanvas
 import com.example.ui.components.WeatherFooter
 import com.example.ui.components.formatPrecipInches
+import com.example.ui.theme.LocalThemePalette
 import com.example.ui.viewmodel.TemperatureUnit
 import com.example.util.rememberDropletPlayers
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -108,6 +109,7 @@ fun DetailedForecastScreen(
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(pageCount = { DetailTabs.size })
     val density = LocalDensity.current
+    val palette = LocalThemePalette.current
     // Interactive dismiss: drag sheet down, spring back or close
     val dismissOffset = remember { Animatable(0f) }
     val dismissThresholdPx = with(density) { 140.dp.toPx() }
@@ -132,7 +134,7 @@ fun DetailedForecastScreen(
                 scaleX = 1f - t * 0.04f
                 scaleY = 1f - t * 0.04f
             },
-        color = Color(0xFFF2F2F7),
+        color = palette.background,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Column(
@@ -192,14 +194,14 @@ fun DetailedForecastScreen(
                         .width(44.dp)
                         .height(5.dp)
                         .clip(RoundedCornerShape(3.dp))
-                        .background(Color(0xFFD1D1D6))
+                        .background(palette.border)
                 )
                 Text(
                     text = "SWIPE DOWN FOR HOME",
                     fontSize = 9.sp,
                     fontFamily = FontFamily.Monospace,
                     letterSpacing = 1.sp,
-                    color = Color(0xFFAEAEB2),
+                    color = palette.tertiaryText,
                     modifier = Modifier.padding(top = 8.dp)
                 )
             }
@@ -218,21 +220,21 @@ fun DetailedForecastScreen(
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = FontFamily.SansSerif,
-                        color = Color(0xFF1C1C1E)
+                        color = palette.primaryText
                     )
                     Text(
                         text = "forecasts",
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = FontFamily.SansSerif,
-                        color = Color(0xFF1C1C1E)
+                        color = palette.primaryText
                     )
                     Text(
                         text = "${data.cityName.uppercase()} · ${data.country.uppercase()}",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
-                        color = Color(0xFF8E8E93),
+                        color = palette.secondaryText,
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
@@ -244,13 +246,13 @@ fun DetailedForecastScreen(
                     },
                     modifier = Modifier
                         .clip(CircleShape)
-                        .background(Color(0xFFE5E5EA))
+                        .background(palette.chromeBg)
                         .testTag("close_details_button")
                 ) {
                     Icon(
                         imageVector = Icons.Default.KeyboardArrowDown,
                         contentDescription = "Close",
-                        tint = Color(0xFF1C1C1E)
+                        tint = palette.chromeFg
                     )
                 }
             }
@@ -269,7 +271,9 @@ fun DetailedForecastScreen(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(16.dp))
-                            .background(if (isSel) Color(0xFF1C1C1E) else Color(0xFFE5E5EA))
+                            .background(
+                                if (isSel) palette.chipSelectedBg else palette.chipBg
+                            )
                             .clickable {
                                 feedback.plink()
                                 scope.launch {
@@ -285,7 +289,7 @@ fun DetailedForecastScreen(
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Black,
                             fontFamily = FontFamily.Monospace,
-                            color = if (isSel) Color.White else Color(0xFF8E8E93)
+                            color = if (isSel) palette.chipSelectedFg else palette.secondaryText
                         )
                     }
                 }
@@ -295,7 +299,7 @@ fun DetailedForecastScreen(
                 text = "SWIPE LEFT / RIGHT TO SWITCH TABS",
                 fontSize = 9.sp,
                 fontFamily = FontFamily.Monospace,
-                color = Color(0xFFAEAEB2),
+                color = palette.tertiaryText,
                 letterSpacing = 0.8.sp,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -412,6 +416,7 @@ private fun PrecipTabContent(
         nextRainHourLabel(data.hourlyList, selectedHourIndex)
     }
 
+    val palette = LocalThemePalette.current
     // Unique liquid chance orb — fills to precip probability
     Box(
         modifier = Modifier
@@ -420,7 +425,11 @@ private fun PrecipTabContent(
             .clip(RoundedCornerShape(28.dp))
             .background(
                 Brush.verticalGradient(
-                    listOf(Color(0xFFE8F4FF), Color(0xFFF2F2F7))
+                    if (palette.isDark) {
+                        listOf(Color(0xFF1A2A3A), palette.surface)
+                    } else {
+                        listOf(Color(0xFFE8F4FF), palette.background)
+                    }
                 )
             ),
         contentAlignment = Alignment.Center
@@ -540,7 +549,7 @@ private fun PrecipTabContent(
                 fontWeight = FontWeight.Black,
                 fontFamily = FontFamily.Monospace,
                 letterSpacing = 1.sp,
-                color = Color(0xFF8E8E93),
+                color = LocalThemePalette.current.secondaryText,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
@@ -630,11 +639,14 @@ private fun PrecipHourRow(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val palette = LocalThemePalette.current
+    val onSel = palette.chipSelectedFg
+    val onUnsel = palette.primaryText
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(if (isSelected) Color(0xFF1C1C1E) else Color.White)
+            .background(if (isSelected) palette.chipSelectedBg else palette.surface)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -646,13 +658,13 @@ private fun PrecipHourRow(
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Black,
                 fontFamily = FontFamily.Monospace,
-                color = if (isSelected) Color.White else Color(0xFF1C1C1E)
+                color = if (isSelected) onSel else onUnsel
             )
             Text(
                 text = hour.condition.label,
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace,
-                color = if (isSelected) Color(0xFF8E8E93) else Color(0xFF8E8E93)
+                color = palette.secondaryText
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -662,13 +674,13 @@ private fun PrecipHourRow(
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
-                    color = if (isSelected) Color(0xFF64D2FF) else Color(0xFF007AFF)
+                    color = if (isSelected) Color(0xFF64D2FF) else palette.accent
                 )
                 Text(
                     text = "CHANCE",
                     fontSize = 9.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = Color(0xFF8E8E93)
+                    color = palette.secondaryText
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
@@ -677,13 +689,13 @@ private fun PrecipHourRow(
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
-                    color = if (isSelected) Color.White else Color(0xFF1C1C1E)
+                    color = if (isSelected) onSel else onUnsel
                 )
                 Text(
                     text = "RATE",
                     fontSize = 9.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = Color(0xFF8E8E93)
+                    color = palette.secondaryText
                 )
             }
         }
@@ -696,11 +708,14 @@ private fun PrecipDayRow(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val palette = LocalThemePalette.current
+    val onSel = palette.chipSelectedFg
+    val onUnsel = palette.primaryText
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(if (isSelected) Color(0xFF1C1C1E) else Color.White)
+            .background(if (isSelected) palette.chipSelectedBg else palette.surface)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -712,13 +727,13 @@ private fun PrecipDayRow(
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Black,
                 fontFamily = FontFamily.Monospace,
-                color = if (isSelected) Color.White else Color(0xFF1C1C1E)
+                color = if (isSelected) onSel else onUnsel
             )
             Text(
                 text = "${day.dateLabel} · ${day.condition.label}",
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace,
-                color = Color(0xFF8E8E93)
+                color = palette.secondaryText
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -728,13 +743,13 @@ private fun PrecipDayRow(
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
-                    color = if (isSelected) Color(0xFF64D2FF) else Color(0xFF007AFF)
+                    color = if (isSelected) Color(0xFF64D2FF) else palette.accent
                 )
                 Text(
                     text = "CHANCE",
                     fontSize = 9.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = Color(0xFF8E8E93)
+                    color = palette.secondaryText
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
@@ -743,13 +758,13 @@ private fun PrecipDayRow(
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
-                    color = if (isSelected) Color.White else Color(0xFF1C1C1E)
+                    color = if (isSelected) onSel else onUnsel
                 )
                 Text(
                     text = "TOTAL",
                     fontSize = 9.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = Color(0xFF8E8E93)
+                    color = palette.secondaryText
                 )
             }
         }
@@ -1491,6 +1506,7 @@ private fun DayWeekToggle(
     onChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalThemePalette.current
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center
@@ -1498,7 +1514,7 @@ private fun DayWeekToggle(
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFFE5E5EA))
+                .background(palette.chipBg)
                 .padding(4.dp)
                 .testTag("day_week_toggle"),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -1506,7 +1522,9 @@ private fun DayWeekToggle(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (!isWeekMode) Color(0xFF1C1C1E) else Color.Transparent)
+                    .background(
+                        if (!isWeekMode) palette.chipSelectedBg else Color.Transparent
+                    )
                     .clickable { onChange(false) }
                     .padding(horizontal = 20.dp, vertical = 8.dp)
                     .testTag("day_toggle"),
@@ -1517,13 +1535,15 @@ private fun DayWeekToggle(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
-                    color = if (!isWeekMode) Color.White else Color(0xFF8E8E93)
+                    color = if (!isWeekMode) palette.chipSelectedFg else palette.secondaryText
                 )
             }
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (isWeekMode) Color(0xFF1C1C1E) else Color.Transparent)
+                    .background(
+                        if (isWeekMode) palette.chipSelectedBg else Color.Transparent
+                    )
                     .clickable { onChange(true) }
                     .padding(horizontal = 20.dp, vertical = 8.dp)
                     .testTag("week_toggle"),
@@ -1534,7 +1554,7 @@ private fun DayWeekToggle(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
-                    color = if (isWeekMode) Color.White else Color(0xFF8E8E93)
+                    color = if (isWeekMode) palette.chipSelectedFg else palette.secondaryText
                 )
             }
         }
@@ -1547,11 +1567,12 @@ private fun InfoChip(
     value: String,
     accent: Color
 ) {
+    val palette = LocalThemePalette.current
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(Color.White)
-            .border(1.dp, Color(0xFFE5E5EA), RoundedCornerShape(16.dp))
+            .background(palette.surface)
+            .border(1.dp, palette.border, RoundedCornerShape(16.dp))
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
         Text(
@@ -1559,7 +1580,7 @@ private fun InfoChip(
             fontSize = 9.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
-            color = Color(0xFF8E8E93)
+            color = palette.secondaryText
         )
         Text(
             text = value,
@@ -1574,11 +1595,14 @@ private fun InfoChip(
 
 @Composable
 private fun MetricCard(content: @Composable () -> Unit) {
+    val palette = LocalThemePalette.current
+    // High-contrast panel: elevated surface in dark, ink card in light/yellow
+    val cardBg = if (palette.isDark) palette.surfaceElevated else Color(0xFF1C1C1E)
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xFF1C1C1E))
+            .background(cardBg)
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
@@ -1590,8 +1614,14 @@ private fun MetricCard(content: @Composable () -> Unit) {
 private fun MetricRow(
     label: String,
     value: String,
-    valueColor: Color = Color.White
+    valueColor: Color = Color.Unspecified
 ) {
+    val palette = LocalThemePalette.current
+    val resolvedValue = if (valueColor == Color.Unspecified) {
+        if (palette.isDark) palette.primaryText else Color.White
+    } else {
+        valueColor
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1603,25 +1633,26 @@ private fun MetricRow(
             text = label,
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace,
-            color = Color(0xFF8E8E93)
+            color = palette.secondaryText
         )
         Text(
             text = value,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
-            color = valueColor
+            color = resolvedValue
         )
     }
 }
 
 @Composable
 private fun MetricDivider() {
+    val palette = LocalThemePalette.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(1.dp)
-            .background(Color(0xFF2C2C2E))
+            .background(palette.divider)
     )
 }
 

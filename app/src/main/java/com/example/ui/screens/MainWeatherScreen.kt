@@ -14,6 +14,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,7 +41,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -63,6 +65,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.WeatherCondition
 import com.example.ui.components.ThreeDDigitsRow
 import com.example.ui.components.ThreeDWeatherCanvas
 import com.example.ui.components.TimelineScrubber
@@ -83,6 +86,9 @@ fun MainWeatherScreen(
     weatherUiState: WeatherUiState,
     selectedHourIndex: Int,
     temperatureUnit: TemperatureUnit,
+    themeMode: Int = 1,
+    onThemeModeChange: (Int) -> Unit = {},
+    lastRefreshAtMs: Long = 0L,
     onHourSelected: (Int) -> Unit,
     onToggleUnit: () -> Unit,
     onOpenCitySheet: () -> Unit,
@@ -92,8 +98,6 @@ fun MainWeatherScreen(
     onOpenDetailsCard: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Default: vibrant yellow theme (matches Not Boring home reference)
-    var themeMode by remember { mutableIntStateOf(1) } // 0 Light, 1 Yellow, 2 Dark
     val appTheme = when (themeMode) {
         1 -> AppThemeMode.YELLOW
         2 -> AppThemeMode.DARK
@@ -182,13 +186,13 @@ fun MainWeatherScreen(
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
                             textAlign = TextAlign.Center,
-                            color = Color(0xFFFF3B30)
+                            color = palette.danger
                         )
 
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
-                                .background(Color(0xFF1C1C1E))
+                                .background(palette.chipSelectedBg)
                                 .clickable { onRetry() }
                                 .padding(horizontal = 24.dp, vertical = 12.dp)
                                 .testTag("retry_button"),
@@ -203,12 +207,12 @@ fun MainWeatherScreen(
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Black,
                                     fontFamily = FontFamily.Monospace,
-                                    color = Color.White
+                                    color = palette.chipSelectedFg
                                 )
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
                                     contentDescription = "Retry",
-                                    tint = Color.White
+                                    tint = palette.chipSelectedFg
                                 )
                             }
                         }
@@ -375,7 +379,7 @@ fun MainWeatherScreen(
                                             .background(chromeBg)
                                             .clickable {
                                                 playFeedback()
-                                                themeMode = (themeMode + 1) % 3
+                                                onThemeModeChange((themeMode + 1) % 3)
                                             }
                                             .testTag("theme_switcher_button"),
                                         contentAlignment = Alignment.Center
@@ -452,24 +456,21 @@ fun MainWeatherScreen(
                                     fontWeight = FontWeight.Black,
                                     fontFamily = FontFamily.SansSerif,
                                     textAlign = TextAlign.Center,
-                                    color = Color(0xFF1C1C1E),
+                                    color = palette.primaryText,
                                     letterSpacing = (-0.3).sp,
                                     lineHeight = 32.sp,
-                                    // Full width + soft wrap so multi-line quotes never clip edges
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 8.dp)
                                 )
                             } else {
-                                Spacer(modifier = Modifier.height(20.dp))
+                                Spacer(modifier = Modifier.height(16.dp))
                             }
                         }
 
-                        // Hero stick in TRUE 3D (Filament): weather at top arm, digits at bottom arm.
-                        // Roomier viewports + moderate scale/arm so rotation never clips edges.
-                        Spacer(modifier = Modifier.height(if (themeMode == 1) 28.dp else 22.dp))
+                        // Hero stick: weather + digits close (small gap, never overlapping)
+                        Spacer(modifier = Modifier.height(if (themeMode == 1) 18.dp else 14.dp))
 
-                        // Pitch allowed on Y-drag / tilt, but hard-capped (<90°) so never upside-down
                         val heroInteraction = rememberInteractive3DState(
                             initialPitch = 12f,
                             initialYaw = 0f,
@@ -478,59 +479,111 @@ fun MainWeatherScreen(
                             autoSpinDegPerSec = 9f,
                             autoSpinOscillate = true
                         )
-                        // Shorter stick arm keeps orbit inside the frame while still reading as one stick
-                        val heroStickArm = 0.42f
+                        val heroStickArm = 0.36f
 
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
+                        // Condition-aware ambient glow (theme-tinted)
+                        val glowColor = remember(condition, palette.isDark) {
+                            conditionGlowColor(condition, palette.isDark)
+                        }
+                        val glowPulse by rememberInfiniteTransition(label = "glow").animateFloat(
+                            initialValue = 0.55f,
+                            targetValue = 1f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(2200, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "glowPulse"
+                        )
+
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                // Extra horizontal room so yaw/pitch never clips left/right
-                                .padding(horizontal = 4.dp)
-                                .interactive3D(
-                                    heroInteraction,
-                                    enablePitch = true,
-                                    enableDeviceTilt = true
-                                )
+                                .padding(horizontal = 4.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            ThreeDWeatherCanvas(
-                                condition = condition,
-                                isDaytime = currentHourly?.isDaytime ?: true,
-                                // Slightly smaller scale + taller box = no top/bottom crop
-                                modelScale = 1.72f,
-                                tintColor = if (palette.isDark) Color(0xFFF2F2F7) else Color(0xFF2C2C2E),
-                                shadeColor = if (palette.isDark) Color(0xFFC7C7CC) else Color(0xFF636366),
-                                interactionState = heroInteraction,
-                                enableGestures = false,
-                                applyInteractionRotation = true,
-                                stickArmY = heroStickArm, // top of stick
+                            // Soft halo behind the stick group
+                            Canvas(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(230.dp)
-                            )
+                                    .height(300.dp)
+                            ) {
+                                drawCircle(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(
+                                            glowColor.copy(alpha = 0.42f * glowPulse),
+                                            glowColor.copy(alpha = 0.12f * glowPulse),
+                                            Color.Transparent
+                                        ),
+                                        center = center,
+                                        radius = size.minDimension * 0.62f
+                                    ),
+                                    radius = size.minDimension * 0.62f,
+                                    center = center
+                                )
+                            }
 
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            ThreeDDigitsRow(
-                                number = displayedTemp,
-                                interactionState = heroInteraction,
-                                scaleToUnits = 1.85f,
-                                // Closer digits
-                                spacing = 0.72f,
-                                fillColor = palette.elementFill,
-                                shadeColor = palette.elementShade,
-                                shadowColor = palette.elementShadow,
-                                highlightColor = palette.elementHighlight,
-                                enableGestures = false,
-                                applyInteractionRotation = true,
-                                stickArmY = -heroStickArm, // bottom of stick
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(230.dp)
-                            )
+                                    .interactive3D(
+                                        heroInteraction,
+                                        enablePitch = true,
+                                        enableDeviceTilt = true
+                                    )
+                            ) {
+                                ThreeDWeatherCanvas(
+                                    condition = condition,
+                                    isDaytime = currentHourly?.isDaytime ?: true,
+                                    modelScale = 1.58f,
+                                    tintColor = palette.elementFill,
+                                    shadeColor = palette.elementShade,
+                                    interactionState = heroInteraction,
+                                    enableGestures = false,
+                                    applyInteractionRotation = true,
+                                    stickArmY = heroStickArm,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(168.dp)
+                                )
+
+                                // Tight gap — close but not touching
+                                Spacer(modifier = Modifier.height(2.dp))
+
+                                ThreeDDigitsRow(
+                                    number = displayedTemp,
+                                    interactionState = heroInteraction,
+                                    scaleToUnits = 1.70f,
+                                    spacing = 0.68f,
+                                    fillColor = palette.elementFill,
+                                    shadeColor = palette.elementShade,
+                                    shadowColor = palette.elementShadow,
+                                    highlightColor = palette.elementHighlight,
+                                    enableGestures = false,
+                                    applyInteractionRotation = true,
+                                    stickArmY = -heroStickArm,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(168.dp)
+                                        // Pull digits up toward weather without overlapping
+                                        .offset(y = (-22).dp)
+                                )
+                            }
                         }
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        // LIVE badge + relative refresh time
+                        LiveRefreshBadge(
+                            lastRefreshAtMs = lastRefreshAtMs,
+                            palette = palette,
+                            onRefresh = {
+                                playFeedback()
+                                onRefresh()
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
                             text = condition.label.lowercase()
@@ -539,11 +592,52 @@ fun MainWeatherScreen(
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = FontFamily.SansSerif,
                             letterSpacing = 0.2.sp,
-                            color = primaryTextColor,
-                            modifier = Modifier.padding(bottom = 8.dp)
+                            color = primaryTextColor
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        // Comfort one-liner
+                        Text(
+                            text = comfortLine(
+                                tempC = if (temperatureUnit == TemperatureUnit.CELSIUS) {
+                                    displayedTemp.toFloat()
+                                } else {
+                                    (displayedTemp - 32) * 5f / 9f
+                                },
+                                humidity = currentHourly?.humidityPercent ?: data.humidityPercent,
+                                windMph = currentHourly?.windSpeedMph ?: data.windSpeedMph
+                            ),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = FontFamily.Monospace,
+                            color = palette.secondaryText,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)
+                        )
+
+                        // Quick stats chips (theme-adaptive)
+                        val humidity = currentHourly?.humidityPercent ?: data.humidityPercent
+                        val wind = (currentHourly?.windSpeedMph ?: data.windSpeedMph).roundToInt()
+                        val rain = currentHourly?.precipChancePercent ?: data.precipChancePercent
+                        val uv = (currentHourly?.uvIndex ?: data.uvIndex).roundToInt()
+                        val highLabel = "H $highTemp°"
+                        val lowLabel = "L $lowTemp°"
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            WeatherStatChip(highLabel, palette)
+                            WeatherStatChip(lowLabel, palette)
+                            WeatherStatChip("💧 $humidity%", palette)
+                            WeatherStatChip("💨 ${wind}mph", palette)
+                            WeatherStatChip("🌧 $rain%", palette)
+                            WeatherStatChip("UV $uv", palette)
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         // Timeline Scrubber Bar
                         TimelineScrubber(
@@ -612,4 +706,121 @@ fun MainWeatherScreen(
             } // when
         } // Box
     } // Surface
+}
+
+@Composable
+private fun WeatherStatChip(label: String, palette: ThemePalette) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(palette.chipBg)
+            .padding(horizontal = 12.dp, vertical = 7.dp)
+    ) {
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            color = palette.primaryText,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun LiveRefreshBadge(
+    lastRefreshAtMs: Long,
+    palette: ThemePalette,
+    onRefresh: () -> Unit
+) {
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(lastRefreshAtMs) {
+        while (true) {
+            nowMs = System.currentTimeMillis()
+            delay(15_000)
+        }
+    }
+    val ageSec = if (lastRefreshAtMs <= 0L) -1L else (nowMs - lastRefreshAtMs) / 1000L
+    val label = when {
+        ageSec < 0L -> "SYNC"
+        ageSec < 45L -> "LIVE · just now"
+        ageSec < 120L -> "LIVE · 1m ago"
+        ageSec < 3600L -> "LIVE · ${ageSec / 60}m ago"
+        else -> "LIVE · ${ageSec / 3600}h ago"
+    }
+    val pulse by rememberInfiniteTransition(label = "live").animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "livePulse"
+    )
+
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(palette.chipBg)
+            .clickable(onClick = onRefresh)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .testTag("live_refresh_badge"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .graphicsLayer { alpha = pulse }
+                .clip(CircleShape)
+                .background(if (ageSec in 0 until 120) Color(0xFF34C759) else palette.accent)
+        )
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Black,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 0.8.sp,
+            color = palette.primaryText
+        )
+        Icon(
+            imageVector = Icons.Default.Refresh,
+            contentDescription = "Refresh now",
+            tint = palette.secondaryText,
+            modifier = Modifier.size(12.dp)
+        )
+    }
+}
+
+private fun conditionGlowColor(condition: WeatherCondition, isDark: Boolean): Color {
+    return when (condition) {
+        WeatherCondition.SUNNY, WeatherCondition.CLEAR ->
+            if (isDark) Color(0xFFFFD60A) else Color(0xFFFF9F0A)
+        WeatherCondition.RAINY, WeatherCondition.HEAVY_RAIN ->
+            if (isDark) Color(0xFF64D2FF) else Color(0xFF007AFF)
+        WeatherCondition.THUNDERSTORM ->
+            if (isDark) Color(0xFFBF5AF2) else Color(0xFFAF52DE)
+        WeatherCondition.SNOWY ->
+            if (isDark) Color(0xFFE5E5EA) else Color(0xFF8E8E93)
+        WeatherCondition.WINDY ->
+            if (isDark) Color(0xFF5AC8FA) else Color(0xFF64D2FF)
+        else ->
+            if (isDark) Color(0xFF8E8E93) else Color(0xFF636366)
+    }
+}
+
+/** Playful one-liner from temp + humidity + wind. */
+private fun comfortLine(tempC: Float, humidity: Int, windMph: Float): String {
+    return when {
+        tempC >= 32f -> "Scorching · hydrate like you mean it"
+        tempC >= 26f && humidity >= 70 -> "Sticky heat · shade is a strategy"
+        tempC >= 22f && tempC < 28f && humidity < 65 && windMph < 15f ->
+            "Pretty perfect · go touch grass"
+        tempC in 16f..22f && windMph < 18f -> "Jacket optional · vibes mandatory"
+        tempC < 5f -> "Bundle up · winter is not a drill"
+        tempC < 12f -> "Crisp air · hoodie weather unlocked"
+        windMph >= 22f -> "Windy · hold onto your hat (and plans)"
+        humidity >= 85 -> "Humidity doing the most today"
+        else -> "Another day of atmospheric theatre"
+    }
 }

@@ -1,18 +1,15 @@
 package com.example.ui.screens
 
+import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -34,20 +31,18 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CityEntity
-
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.runtime.remember
-import android.view.HapticFeedbackConstants
+import com.example.ui.theme.LocalThemePalette
 import com.example.util.PianoSoundManager
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,6 +61,7 @@ fun CitySelectionSheet(
     onDetectLocation: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val palette = LocalThemePalette.current
     val view = LocalView.current
     val context = view.context.applicationContext
     val soundManager = remember { PianoSoundManager(context) }
@@ -80,7 +76,7 @@ fun CitySelectionSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFFF2F2F7),
+        containerColor = palette.background,
         dragHandle = null
     ) {
         Column(
@@ -89,7 +85,6 @@ fun CitySelectionSheet(
                 .fillMaxHeight(0.85f)
                 .padding(20.dp)
         ) {
-            // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -101,7 +96,7 @@ fun CitySelectionSheet(
                     fontWeight = FontWeight.Black,
                     fontFamily = FontFamily.Monospace,
                     letterSpacing = 2.sp,
-                    color = Color(0xFF1C1C1E)
+                    color = palette.primaryText
                 )
 
                 IconButton(
@@ -111,18 +106,17 @@ fun CitySelectionSheet(
                     },
                     modifier = Modifier
                         .clip(CircleShape)
-                        .background(Color(0xFFE5E5EA))
+                        .background(palette.chromeBg)
                         .testTag("close_city_sheet_button")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Close",
-                        tint = Color(0xFF1C1C1E)
+                        tint = palette.chromeFg
                     )
                 }
             }
 
-            // Search Bar
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = onQueryChange,
@@ -135,21 +129,21 @@ fun CitySelectionSheet(
                         text = "Search city worldwide...",
                         fontSize = 13.sp,
                         fontFamily = FontFamily.Monospace,
-                        color = Color(0xFF8E8E93)
+                        color = palette.secondaryText
                     )
                 },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = "Search",
-                        tint = Color(0xFF1C1C1E)
+                        tint = palette.primaryText
                     )
                 },
                 trailingIcon = {
                     if (isSearching) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),
-                            color = Color(0xFF1C1C1E),
+                            color = palette.primaryText,
                             strokeWidth = 2.dp
                         )
                     }
@@ -157,16 +151,16 @@ fun CitySelectionSheet(
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFF1C1C1E),
-                    unfocusedBorderColor = Color(0xFFE5E5EA),
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    focusedTextColor = Color(0xFF1C1C1E),
-                    unfocusedTextColor = Color(0xFF1C1C1E)
+                    focusedBorderColor = palette.primaryText,
+                    unfocusedBorderColor = palette.fieldBorder,
+                    focusedContainerColor = palette.fieldBg,
+                    unfocusedContainerColor = palette.fieldBg,
+                    focusedTextColor = palette.primaryText,
+                    unfocusedTextColor = palette.primaryText,
+                    cursorColor = palette.accent
                 )
             )
 
-            // Search Results or Saved Cities List
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -180,7 +174,7 @@ fun CitySelectionSheet(
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
-                            color = Color(0xFF8E8E93),
+                            color = palette.secondaryText,
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
                     }
@@ -190,7 +184,7 @@ fun CitySelectionSheet(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
-                                .background(Color.White)
+                                .background(palette.surface)
                                 .clickable {
                                     onSaveCity(city)
                                     onDismiss()
@@ -204,19 +198,19 @@ fun CitySelectionSheet(
                                     text = city.name,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF1C1C1E)
+                                    color = palette.primaryText
                                 )
                                 Text(
                                     text = city.country,
                                     fontSize = 12.sp,
-                                    color = Color(0xFF8E8E93)
+                                    color = palette.secondaryText
                                 )
                             }
 
                             Icon(
                                 imageVector = Icons.Default.Add,
                                 contentDescription = "Add",
-                                tint = Color(0xFF1C1C1E)
+                                tint = palette.primaryText
                             )
                         }
                     }
@@ -226,7 +220,7 @@ fun CitySelectionSheet(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
-                                .background(Color(0xFFE5E5EA))
+                                .background(palette.chipBg)
                                 .clickable {
                                     onDetectLocation()
                                     onDismiss()
@@ -239,7 +233,7 @@ fun CitySelectionSheet(
                             Icon(
                                 imageVector = Icons.Default.MyLocation,
                                 contentDescription = "Detect Location",
-                                tint = Color(0xFF1C1C1E),
+                                tint = palette.primaryText,
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
@@ -247,7 +241,7 @@ fun CitySelectionSheet(
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Black,
                                 fontFamily = FontFamily.Monospace,
-                                color = Color(0xFF1C1C1E)
+                                color = palette.primaryText
                             )
                         }
                     }
@@ -258,7 +252,7 @@ fun CitySelectionSheet(
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
-                            color = Color(0xFF8E8E93),
+                            color = palette.secondaryText,
                             modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                         )
                     }
@@ -269,7 +263,9 @@ fun CitySelectionSheet(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
-                                .background(if (isSelected) Color(0xFF1C1C1E) else Color.White)
+                                .background(
+                                    if (isSelected) palette.chipSelectedBg else palette.surface
+                                )
                                 .clickable {
                                     onSelectCity(city)
                                     onDismiss()
@@ -285,7 +281,11 @@ fun CitySelectionSheet(
                                 Icon(
                                     imageVector = Icons.Default.LocationOn,
                                     contentDescription = null,
-                                    tint = if (isSelected) Color.White else Color(0xFF1C1C1E),
+                                    tint = if (isSelected) {
+                                        palette.chipSelectedFg
+                                    } else {
+                                        palette.primaryText
+                                    },
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Column {
@@ -293,12 +293,20 @@ fun CitySelectionSheet(
                                         text = city.name,
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isSelected) Color.White else Color(0xFF1C1C1E)
+                                        color = if (isSelected) {
+                                            palette.chipSelectedFg
+                                        } else {
+                                            palette.primaryText
+                                        }
                                     )
                                     Text(
                                         text = city.country,
                                         fontSize = 12.sp,
-                                        color = if (isSelected) Color(0xFFA1A1A6) else Color(0xFF8E8E93)
+                                        color = if (isSelected) {
+                                            palette.chipSelectedFg.copy(alpha = 0.7f)
+                                        } else {
+                                            palette.secondaryText
+                                        }
                                     )
                                 }
                             }
@@ -311,7 +319,11 @@ fun CitySelectionSheet(
                                     Icon(
                                         imageVector = Icons.Default.Delete,
                                         contentDescription = "Delete",
-                                        tint = if (isSelected) Color(0xFFA1A1A6) else Color(0xFF8E8E93)
+                                        tint = if (isSelected) {
+                                            palette.chipSelectedFg.copy(alpha = 0.65f)
+                                        } else {
+                                            palette.secondaryText
+                                        }
                                     )
                                 }
                             }

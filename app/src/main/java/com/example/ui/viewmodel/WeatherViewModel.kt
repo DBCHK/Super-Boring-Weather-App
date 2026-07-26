@@ -54,6 +54,10 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     private val _weatherUiState = MutableStateFlow<WeatherUiState>(WeatherUiState.Loading)
     val weatherUiState: StateFlow<WeatherUiState> = _weatherUiState.asStateFlow()
 
+    /** Epoch millis of last successful weather fetch (0 = never). */
+    private val _lastRefreshAtMs = MutableStateFlow(0L)
+    val lastRefreshAtMs: StateFlow<Long> = _lastRefreshAtMs.asStateFlow()
+
     private val _selectedHourIndex = MutableStateFlow(0)
     val selectedHourIndex: StateFlow<Int> = _selectedHourIndex.asStateFlow()
 
@@ -233,6 +237,7 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
                 val data = repository.fetchWeather(city)
                 if (_selectedCity.value.id == city.id) {
                     _weatherUiState.value = WeatherUiState.Success(data)
+                    _lastRefreshAtMs.value = System.currentTimeMillis()
                     _selectedHourIndex.value = 0
                     // Keep home-screen widgets in sync
                     com.example.widget.WidgetUpdateHelper.publishFromApp(
