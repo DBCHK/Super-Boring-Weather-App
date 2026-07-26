@@ -4,6 +4,7 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import com.example.widget.WidgetRefreshScheduler
 import com.example.widget.WidgetSnapshotStore
 import com.example.widget.WidgetUpdateHelper
 import kotlinx.coroutines.CoroutineScope
@@ -12,8 +13,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * Shared widget lifecycle: paints from cache immediately, then refreshes weather.
- * System updatePeriodMillis is set to 30 minutes on each provider info XML.
+ * Shared widget lifecycle:
+ *  - paints from cache immediately
+ *  - fetches live weather on update / boot / 30‑min alarm
+ *  - keeps AlarmManager schedule alive while any weather widget is installed
  */
 abstract class BaseWeatherWidgetProvider : AppWidgetProvider() {
 
@@ -26,6 +29,7 @@ abstract class BaseWeatherWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
+        // Immediate paint from last snapshot (no blank frame)
         val snap = WidgetSnapshotStore.load(context)
         appWidgetIds.forEach { id ->
             WidgetUpdateHelper.bindProvider(
@@ -36,7 +40,9 @@ abstract class BaseWeatherWidgetProvider : AppWidgetProvider() {
                 snap
             )
         }
-        // Network refresh (also repaints when done)
+        // Ensure 30‑min background refresh is armed
+        WidgetRefreshScheduler.schedule(context)
+        // Network refresh then rebind all widgets
         scope.launch {
             WidgetUpdateHelper.refreshAll(context)
         }
@@ -44,15 +50,34 @@ abstract class BaseWeatherWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == AppWidgetManager.ACTION_APPWIDGET_UPDATE ||
-            intent.action == Intent.ACTION_BOOT_COMPLETED
-        ) {
-            scope.launch { WidgetUpdateHelper.refreshAll(context) }
+        val action = intent.action ?: return
+        when (action) {
+            AppWidgetManager.ACTION_APPWIDGET_UPDATE,
+            Intent.ACTION_BOOT_COMPLETED,
+            WidgetRefreshScheduler.ACTION_PERIODIC_REFRESH -> {
+                // Re-arm after boot / periodic fire (alarms are cleared on reboot)
+                if (action == Intent.ACTION_BOOT_COMPLETED ||
+                    action == WidgetRefreshScheduler.ACTION_PERIODIC_REFRESH
+                ) {
+                    WidgetRefreshScheduler.schedule(context)
+                }
+                scope.launch {
+                    WidgetUpdateHelper.refreshAll(context)
+                }
+            }
         }
     }
 
     override fun onEnabled(context: Context) {
+        WidgetRefreshScheduler.schedule(context)
         scope.launch { WidgetUpdateHelper.refreshAll(context) }
+    }
+
+    override fun onDisabled(context: Context) {
+        // Stop background refresh only when no weather widgets remain
+        if (!WidgetRefreshScheduler.hasAnyWidgets(context)) {
+            WidgetRefreshScheduler.cancel(context)
+        }
     }
 }
 

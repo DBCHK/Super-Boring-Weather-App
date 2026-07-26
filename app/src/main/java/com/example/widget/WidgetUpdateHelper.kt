@@ -86,8 +86,11 @@ object WidgetUpdateHelper {
 
     /** Call from the main app after a successful weather fetch. */
     fun publishFromApp(context: Context, snap: WidgetSnapshot) {
-        WidgetSnapshotStore.save(context.applicationContext, snap)
-        pushToAllWidgets(context.applicationContext, snap)
+        val app = context.applicationContext
+        WidgetSnapshotStore.save(app, snap)
+        pushToAllWidgets(app, snap)
+        // Keep background 30‑min refresh armed whenever the app has fresh data
+        WidgetRefreshScheduler.schedule(app)
     }
 
     private fun pushToAllWidgets(context: Context, snap: WidgetSnapshot) {
@@ -138,28 +141,43 @@ object WidgetUpdateHelper {
             setTextViewText(R.id.widget_temp, "${snap.displayTemp()}°")
             setTextViewText(R.id.widget_condition, snap.conditionLabel)
             setTextViewText(
-                R.id.widget_hi_lo,
-                "H:${snap.displayHigh()}°  L:${snap.displayLow()}°"
+                R.id.widget_summary,
+                snap.summaryLine.ifBlank {
+                    "Feels ${snap.displayFeels()}° · H ${snap.displayHigh()}° L ${snap.displayLow()}°"
+                }
             )
+            setTextViewText(
+                R.id.widget_chip_wind,
+                "${snap.windMph}mph ${snap.windCardinal()}"
+            )
+            setTextViewText(R.id.widget_chip_hum, "${snap.humidity}% RH")
+            setTextViewText(R.id.widget_chip_uv, "UV ${snap.uvIndex}")
+            setTextViewText(R.id.widget_live, "LIVE")
+            // Icon follows live condition (sun / cloud / rain / snow / storm)
+            setImageViewResource(R.id.widget_orb, conditionIcon(snap.conditionKey))
             setOnClickPendingIntent(R.id.widget_root, openAppIntent(context))
         }
     }
 
     private fun bindThreeDay(context: Context, snap: WidgetSnapshot): RemoteViews {
         return RemoteViews(context.packageName, R.layout.widget_three_day).apply {
+            setTextViewText(R.id.widget_header, "3-DAY · ${snap.cityName}")
             setTextViewText(R.id.day0_name, snap.day0Name)
             setTextViewText(R.id.day0_high, "${snap.day0High}°")
             setTextViewText(R.id.day0_low, "${snap.day0Low}°")
+            setTextViewText(R.id.day0_precip, "${snap.day0Precip}%")
             setImageViewResource(R.id.day0_icon, iconRes(snap.day0Icon))
 
             setTextViewText(R.id.day1_name, snap.day1Name)
             setTextViewText(R.id.day1_high, "${snap.day1High}°")
             setTextViewText(R.id.day1_low, "${snap.day1Low}°")
+            setTextViewText(R.id.day1_precip, "${snap.day1Precip}%")
             setImageViewResource(R.id.day1_icon, iconRes(snap.day1Icon))
 
             setTextViewText(R.id.day2_name, snap.day2Name)
             setTextViewText(R.id.day2_high, "${snap.day2High}°")
             setTextViewText(R.id.day2_low, "${snap.day2Low}°")
+            setTextViewText(R.id.day2_precip, "${snap.day2Precip}%")
             setImageViewResource(R.id.day2_icon, iconRes(snap.day2Icon))
 
             setOnClickPendingIntent(R.id.widget_root, openAppIntent(context))
@@ -171,9 +189,22 @@ object WidgetUpdateHelper {
             setTextViewText(R.id.widget_temp, "${snap.displayTemp()}°")
             setTextViewText(R.id.widget_city, snap.cityName)
             setTextViewText(R.id.widget_condition, snap.conditionLabel)
-            setTextViewText(R.id.widget_high, "${snap.displayHigh()}°")
-            setTextViewText(R.id.widget_low, "${snap.displayLow()}°")
-            setTextViewText(R.id.widget_meta, "AQI ${snap.aqi} · ${snap.aqiLabel}")
+            setTextViewText(R.id.widget_high, "H ${snap.displayHigh()}°")
+            setTextViewText(R.id.widget_low, "L ${snap.displayLow()}°")
+            setTextViewText(
+                R.id.widget_meta,
+                "AQI ${snap.aqi} · UV ${snap.uvIndex} · ${snap.humidity}% RH"
+            )
+            setTextViewText(
+                R.id.widget_summary,
+                "Feels ${snap.displayFeels()}° · ${snap.precipChance}% rain · ${snap.windMph}mph ${snap.windCardinal()}"
+            )
+            setTextViewText(R.id.widget_chip_precip, "${snap.precipChance}% 🌧")
+            setTextViewText(
+                R.id.widget_chip_wind,
+                "${snap.windMph}mph ${snap.windCardinal()}"
+            )
+            setTextViewText(R.id.widget_chip_feels, "FEELS ${snap.displayFeels()}°")
             setImageViewResource(R.id.widget_weather_icon, conditionIcon(snap.conditionKey))
             setOnClickPendingIntent(R.id.widget_root, openAppIntent(context))
         }
@@ -181,8 +212,12 @@ object WidgetUpdateHelper {
 
     private fun bindAirQuality(context: Context, snap: WidgetSnapshot): RemoteViews {
         return RemoteViews(context.packageName, R.layout.widget_air_quality).apply {
-            setTextViewText(R.id.widget_aqi_value, "AQI:${snap.aqi}")
+            setTextViewText(R.id.widget_aqi_value, "AQI ${snap.aqi}")
             setTextViewText(R.id.widget_aqi_label, snap.aqiLabel)
+            setTextViewText(
+                R.id.widget_meta,
+                "UV ${snap.uvIndex} · ${snap.humidity}% RH · ${snap.windMph}mph"
+            )
             setTextViewText(R.id.widget_city, snap.cityName)
             setOnClickPendingIntent(R.id.widget_root, openAppIntent(context))
         }
@@ -192,6 +227,7 @@ object WidgetUpdateHelper {
         return RemoteViews(context.packageName, R.layout.widget_moon_phase).apply {
             setTextViewText(R.id.widget_moon_phase, snap.moonPhase)
             setTextViewText(R.id.widget_moon_illum, "${snap.moonIllum}%")
+            setTextViewText(R.id.widget_moon_meta, "ILLUMINATED · ${snap.conditionLabel}")
             setTextViewText(R.id.widget_city, snap.cityName)
             setOnClickPendingIntent(R.id.widget_root, openAppIntent(context))
         }
@@ -206,22 +242,38 @@ object WidgetUpdateHelper {
                 R.id.widget_hi_lo,
                 "H ${snap.displayHigh()}° · L ${snap.displayLow()}°"
             )
+            setTextViewText(
+                R.id.widget_meta,
+                "${snap.precipChance}% rain · ${snap.windMph}mph · UV ${snap.uvIndex}"
+            )
             setImageViewResource(R.id.widget_weather_icon, conditionIcon(snap.conditionKey))
             setOnClickPendingIntent(R.id.widget_root, openAppIntent(context))
         }
     }
 
-    private fun iconRes(key: String): Int = when (key) {
+    private fun iconRes(key: String): Int = when (key.lowercase()) {
         "sun" -> R.drawable.widget_ic_sun
-        "rain" -> R.drawable.widget_ic_rain_cloud
+        "rain", "storm" -> R.drawable.widget_ic_rain_cloud
         "snow" -> R.drawable.widget_ic_snow
+        "moon" -> R.drawable.widget_ic_moon
         else -> R.drawable.widget_ic_cloud
     }
 
-    private fun conditionIcon(key: String): Int = when (key) {
+    /**
+     * Maps [WeatherCondition] names (and day icon keys) to widget drawables.
+     */
+    fun conditionIcon(key: String): Int = when (key.uppercase()) {
         "SUNNY", "CLEAR" -> R.drawable.widget_ic_sun
-        "RAINY", "HEAVY_RAIN", "THUNDERSTORM" -> R.drawable.widget_ic_rain_cloud
+        "RAINY", "HEAVY_RAIN" -> R.drawable.widget_ic_rain_cloud
+        "THUNDERSTORM" -> R.drawable.widget_ic_rain_cloud
         "SNOWY" -> R.drawable.widget_ic_snow
-        else -> R.drawable.widget_ic_cloud
+        "CLOUDY", "MOSTLY_CLOUDY", "PARTLY_CLOUDY", "HAZE", "WINDY" ->
+            R.drawable.widget_ic_cloud
+        else -> when (key.lowercase()) {
+            "sun", "moon" -> R.drawable.widget_ic_sun
+            "rain", "storm" -> R.drawable.widget_ic_rain_cloud
+            "snow" -> R.drawable.widget_ic_snow
+            else -> R.drawable.widget_ic_cloud
+        }
     }
 }

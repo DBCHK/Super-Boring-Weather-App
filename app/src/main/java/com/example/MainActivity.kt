@@ -89,8 +89,8 @@ fun NotBoringWeatherApp(
     val isSearching by viewModel.isSearching.collectAsState()
     val lastRefreshAtMs by viewModel.lastRefreshAtMs.collectAsState()
 
-    // 0 Light · 1 Yellow · 2 Dark — shared across home, details, city sheet
-    var themeMode by rememberSaveable { mutableIntStateOf(1) }
+    // 0 Light (default white) · 1 Yellow · 2 Dark — shared across home, details, city sheet
+    var themeMode by rememberSaveable { mutableIntStateOf(0) }
     val appTheme = when (themeMode) {
         1 -> AppThemeMode.YELLOW
         2 -> AppThemeMode.DARK

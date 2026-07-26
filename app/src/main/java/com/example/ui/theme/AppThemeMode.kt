@@ -147,7 +147,7 @@ data class ThemePalette(
 }
 
 val LocalThemePalette = staticCompositionLocalOf {
-    ThemePalette.forMode(AppThemeMode.YELLOW)
+    ThemePalette.forMode(AppThemeMode.LIGHT)
 }
 
-val LocalAppThemeMode = staticCompositionLocalOf { AppThemeMode.YELLOW }
+val LocalAppThemeMode = staticCompositionLocalOf { AppThemeMode.LIGHT }

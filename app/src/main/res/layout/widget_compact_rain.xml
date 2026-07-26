@@ -3,7 +3,7 @@
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_bg_dark"
+    android:background="@drawable/widget_bg_ink"
     android:padding="14dp">
 
     <LinearLayout
@@ -17,9 +17,9 @@
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif-black"
             android:includeFontPadding="false"
-            android:text="65°"
+            android:text="18°"
             android:textColor="#FFFFFFFF"
-            android:textSize="48sp"
+            android:textSize="44sp"
             android:textStyle="bold" />
 
         <TextView
@@ -30,7 +30,7 @@
             android:letterSpacing="0.06"
             android:text="SEATTLE"
             android:textColor="#FF8E8E93"
-            android:textSize="11sp"
+            android:textSize="10sp"
             android:textStyle="bold" />
 
         <TextView
@@ -40,25 +40,38 @@
             android:fontFamily="sans-serif-black"
             android:text="LIGHT RAIN"
             android:textColor="#FFFFFFFF"
-            android:textSize="14sp"
+            android:textSize="13sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/widget_hi_lo"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:fontFamily="sans-serif-medium"
-            android:text="H 68° · L 54°"
+            android:layout_marginTop="2dp"
+            android:fontFamily="monospace"
+            android:text="H 22° · L 12°"
             android:textColor="#FF8E8E93"
             android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/widget_meta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:ellipsize="end"
+            android:fontFamily="monospace"
+            android:maxLines="1"
+            android:text="40% rain · 8mph · UV 3"
+            android:textColor="#FFAEAEB2"
+            android:textSize="10sp" />
     </LinearLayout>
 
     <ImageView
         android:id="@+id/widget_weather_icon"
-        android:layout_width="70dp"
-        android:layout_height="62dp"
-        android:layout_gravity="bottom|end"
+        android:layout_width="58dp"
+        android:layout_height="52dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="4dp"
         android:contentDescription="@string/widget_weather_icon_desc"
         android:src="@drawable/widget_ic_rain_cloud" />
 </FrameLayout>

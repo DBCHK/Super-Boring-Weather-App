@@ -13,38 +13,29 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <LinearLayout
+        <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:orientation="vertical">
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.06"
+            android:text="AIR QUALITY"
+            android:textColor="#FF8E8E93"
+            android:textSize="11sp"
+            android:textStyle="bold" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-medium"
-                android:letterSpacing="0.06"
-                android:text="AIR QUALITY"
-                android:textColor="#FF8E8E93"
-                android:textSize="11sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/widget_aqi_value"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-black"
-                android:text="AQI:59"
-                android:textColor="#FF1C1C1E"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <ImageView
-            android:layout_width="12dp"
-            android:layout_height="12dp"
-            android:contentDescription="@null"
-            android:src="@drawable/widget_dot_blue" />
+        <TextView
+            android:id="@+id/widget_aqi_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_icon_circle"
+            android:fontFamily="monospace"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
+            android:text="AQI 59"
+            android:textColor="#FF1C1C1E"
+            android:textSize="10sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
     <TextView
@@ -58,16 +49,26 @@
         android:letterSpacing="-0.02"
         android:text="GOOD"
         android:textColor="#FF1C1C1E"
-        android:textSize="40sp"
+        android:textSize="36sp"
         android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_meta"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="monospace"
+        android:text="UV 4 · 62% RH · 8mph"
+        android:textColor="#FF8E8E93"
+        android:textSize="11sp" />
 
     <TextView
         android:id="@+id/widget_city"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
         android:fontFamily="sans-serif-medium"
         android:text="SEATTLE"
-        android:textColor="#FF8E8E93"
-        android:textSize="11sp"
+        android:textColor="#FFAEAEB2"
+        android:textSize="10sp"
         android:textStyle="bold" />
 </LinearLayout>

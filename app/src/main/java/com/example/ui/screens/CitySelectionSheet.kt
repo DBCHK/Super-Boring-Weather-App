@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,11 +30,9 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -43,7 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CityEntity
 import com.example.ui.theme.LocalThemePalette
-import com.example.util.PianoSoundManager
+import com.example.util.rememberDropletPlayers
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,16 +59,8 @@ fun CitySelectionSheet(
     onDismiss: () -> Unit
 ) {
     val palette = LocalThemePalette.current
-    val view = LocalView.current
-    val context = view.context.applicationContext
-    val soundManager = remember { PianoSoundManager(context) }
-
-    val playFeedback = remember {
-        {
-            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            soundManager.playSubtlePianoNote()
-        }
-    }
+    val feedback = rememberDropletPlayers()
+    val playFeedback = feedback.plink
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -101,7 +90,7 @@ fun CitySelectionSheet(
 
                 IconButton(
                     onClick = {
-                        playFeedback()
+                        feedback.whooshDown()
                         onDismiss()
                     },
                     modifier = Modifier
@@ -186,6 +175,7 @@ fun CitySelectionSheet(
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(palette.surface)
                                 .clickable {
+                                    feedback.chime()
                                     onSaveCity(city)
                                     onDismiss()
                                 }
@@ -222,6 +212,7 @@ fun CitySelectionSheet(
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(palette.chipBg)
                                 .clickable {
+                                    feedback.chime()
                                     onDetectLocation()
                                     onDismiss()
                                 }
@@ -267,6 +258,7 @@ fun CitySelectionSheet(
                                     if (isSelected) palette.chipSelectedBg else palette.surface
                                 )
                                 .clickable {
+                                    feedback.snap()
                                     onSelectCity(city)
                                     onDismiss()
                                 }

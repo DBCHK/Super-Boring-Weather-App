@@ -152,7 +152,7 @@ fun DetailedForecastScreen(
                             onDragEnd = {
                                 scope.launch {
                                     if (dismissOffset.value > dismissThresholdPx) {
-                                        feedback.splash()
+                                        feedback.whooshDown()
                                         dismissOffset.animateTo(
                                             targetValue = size.height.toFloat(),
                                             animationSpec = spring(
@@ -241,7 +241,7 @@ fun DetailedForecastScreen(
 
                 IconButton(
                     onClick = {
-                        feedback.splash()
+                        feedback.whooshDown()
                         onClose()
                     },
                     modifier = Modifier

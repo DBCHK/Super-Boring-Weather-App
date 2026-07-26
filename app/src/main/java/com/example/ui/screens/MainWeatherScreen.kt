@@ -71,13 +71,16 @@ import com.example.ui.components.ThreeDWeatherCanvas
 import com.example.ui.components.TimelineScrubber
 import com.example.ui.components.WeatherBackgroundShaderCanvas
 import com.example.ui.components.WeatherFooter
+import com.example.ui.components.bouncyClick
+import com.example.ui.components.entrance
 import com.example.ui.components.interactive3D
+import com.example.ui.components.rememberEntranceProgress
 import com.example.ui.components.rememberInteractive3DState
 import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.ThemePalette
 import com.example.ui.viewmodel.TemperatureUnit
 import com.example.ui.viewmodel.WeatherUiState
-import com.example.util.rememberDropletFeedback
+import com.example.util.rememberDropletPlayers
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
@@ -86,7 +89,7 @@ fun MainWeatherScreen(
     weatherUiState: WeatherUiState,
     selectedHourIndex: Int,
     temperatureUnit: TemperatureUnit,
-    themeMode: Int = 1,
+    themeMode: Int = 0,
     onThemeModeChange: (Int) -> Unit = {},
     lastRefreshAtMs: Long = 0L,
     onHourSelected: (Int) -> Unit,
@@ -238,14 +241,18 @@ fun MainWeatherScreen(
                 val lowTemp = if (temperatureUnit == TemperatureUnit.FAHRENHEIT) data.lowTempF.roundToInt() else data.lowTempC.roundToInt()
                 val condition = currentHourly?.condition ?: data.condition
 
-                val (playFeedback, _) = rememberDropletFeedback()
+                val feedback = rememberDropletPlayers()
+                val playFeedback = feedback.tap
                 val scrollState = rememberScrollState()
                 var swipeUpAccum by remember { mutableFloatStateOf(0f) }
+                val heroEnter = rememberEntranceProgress(delayMs = 40, durationMs = 560)
+                val chipsEnter = rememberEntranceProgress(delayMs = 180, durationMs = 520)
+                val scrubEnter = rememberEntranceProgress(delayMs = 280, durationMs = 520)
 
                 // Subtle bounce on the "swipe up" chevron
                 val chevronBob by rememberInfiniteTransition(label = "chevron").animateFloat(
                     initialValue = 0f,
-                    targetValue = -8f,
+                    targetValue = -10f,
                     animationSpec = infiniteRepeatable(
                         animation = tween(900, easing = FastOutSlowInEasing),
                         repeatMode = RepeatMode.Reverse
@@ -261,7 +268,7 @@ fun MainWeatherScreen(
                             detectVerticalDragGestures(
                                 onDragEnd = {
                                     if (swipeUpAccum < -110f) {
-                                        playFeedback()
+                                        feedback.whooshUp()
                                         onOpenDetailsCard()
                                     }
                                     swipeUpAccum = 0f
@@ -324,8 +331,8 @@ fun MainWeatherScreen(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(14.dp))
                                             .background(chromeBg)
-                                            .clickable {
-                                                playFeedback()
+                                            .bouncyClick {
+                                                feedback.plink()
                                                 onOpenCitySheet()
                                             }
                                             .padding(horizontal = 10.dp, vertical = 5.dp)
@@ -356,8 +363,8 @@ fun MainWeatherScreen(
                                             .size(26.dp)
                                             .clip(CircleShape)
                                             .background(chromeBg)
-                                            .clickable {
-                                                playFeedback()
+                                            .bouncyClick {
+                                                feedback.chime()
                                                 onDetectLocation()
                                             }
                                             .testTag("detect_location_button"),
@@ -377,8 +384,8 @@ fun MainWeatherScreen(
                                             .size(26.dp)
                                             .clip(CircleShape)
                                             .background(chromeBg)
-                                            .clickable {
-                                                playFeedback()
+                                            .bouncyClick {
+                                                feedback.swoosh()
                                                 onThemeModeChange((themeMode + 1) % 3)
                                             }
                                             .testTag("theme_switcher_button"),
@@ -398,8 +405,8 @@ fun MainWeatherScreen(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(14.dp))
                                         .background(chromeBg)
-                                        .clickable {
-                                            playFeedback()
+                                        .bouncyClick {
+                                            feedback.snap()
                                             onToggleUnit()
                                         }
                                         .padding(horizontal = 9.dp, vertical = 5.dp)
@@ -427,49 +434,11 @@ fun MainWeatherScreen(
                                 }
                             }
 
-                            // Hero quote — reference scale & airy spacing (yellow theme)
-                            if (themeMode == 1) {
-                                val yellowQuotes = remember {
-                                    listOf(
-                                        "Life's too short to\nwaste on boring apps.",
-                                        "Umbrella? That's cute.\nThe clouds said no.",
-                                        "Weather so extra\nit needs a publicist.",
-                                        "Sun's out.\nExcuses are cancelled.",
-                                        "If rain had a personality,\nit'd be petty.",
-                                        "Hot take:\nit's literally hot.",
-                                        "Clouds doing the most.\nAgain.",
-                                        "Forecast: 100%\nchance of chaos."
-                                    )
-                                }
-                                var quoteIndex by remember { mutableIntStateOf(0) }
-                                LaunchedEffect(themeMode) {
-                                    quoteIndex = 0
-                                    while (true) {
-                                        delay(4500)
-                                        quoteIndex = (quoteIndex + 1) % yellowQuotes.size
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(24.dp))
-                                Text(
-                                    text = yellowQuotes[quoteIndex],
-                                    fontSize = 26.sp,
-                                    fontWeight = FontWeight.Black,
-                                    fontFamily = FontFamily.SansSerif,
-                                    textAlign = TextAlign.Center,
-                                    color = palette.primaryText,
-                                    letterSpacing = (-0.3).sp,
-                                    lineHeight = 32.sp,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 8.dp)
-                                )
-                            } else {
-                                Spacer(modifier = Modifier.height(16.dp))
-                            }
+                            Spacer(modifier = Modifier.height(16.dp))
                         }
 
                         // Hero stick: weather + digits close (small gap, never overlapping)
-                        Spacer(modifier = Modifier.height(if (themeMode == 1) 18.dp else 14.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         val heroInteraction = rememberInteractive3DState(
                             initialPitch = 12f,
@@ -498,7 +467,8 @@ fun MainWeatherScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 4.dp),
+                                .padding(horizontal = 4.dp)
+                                .entrance(heroEnter, risePx = 36f),
                             contentAlignment = Alignment.Center
                         ) {
                             // Soft halo behind the stick group
@@ -578,7 +548,7 @@ fun MainWeatherScreen(
                             lastRefreshAtMs = lastRefreshAtMs,
                             palette = palette,
                             onRefresh = {
-                                playFeedback()
+                                feedback.bubble()
                                 onRefresh()
                             }
                         )
@@ -625,28 +595,28 @@ fun MainWeatherScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .horizontalScroll(rememberScrollState())
-                                .padding(bottom = 8.dp),
+                                .padding(bottom = 8.dp)
+                                .entrance(chipsEnter, risePx = 18f),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            WeatherStatChip(highLabel, palette)
-                            WeatherStatChip(lowLabel, palette)
-                            WeatherStatChip("💧 $humidity%", palette)
-                            WeatherStatChip("💨 ${wind}mph", palette)
-                            WeatherStatChip("🌧 $rain%", palette)
-                            WeatherStatChip("UV $uv", palette)
+                            WeatherStatChip(highLabel, palette) { feedback.pop() }
+                            WeatherStatChip(lowLabel, palette) { feedback.pop() }
+                            WeatherStatChip("💧 $humidity%", palette) { feedback.drip() }
+                            WeatherStatChip("💨 ${wind}mph", palette) { feedback.whooshUp() }
+                            WeatherStatChip("🌧 $rain%", palette) { feedback.bubble() }
+                            WeatherStatChip("UV $uv", palette) { feedback.plink() }
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Timeline Scrubber Bar
+                        // Timeline Scrubber Bar — musical scrub ticks
                         TimelineScrubber(
                             hourlyList = hourly,
                             selectedIndex = selectedHourIndex,
                             highTemp = highTemp,
                             lowTemp = lowTemp,
                             onHourSelected = { idx ->
-                                playFeedback()
                                 onHourSelected(idx)
                             },
                             trackColor = palette.scrubberTrack,
@@ -654,18 +624,19 @@ fun MainWeatherScreen(
                             labelColor = palette.secondaryText,
                             modifier = Modifier
                                 .padding(vertical = 8.dp)
+                                .entrance(scrubEnter, risePx = 22f)
                                 .testTag("timeline_scrubber")
                         )
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         // Swipe-up affordance (creative sheet cue)
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
-                                .clickable {
-                                    playFeedback()
+                                .bouncyClick {
+                                    feedback.whooshUp()
                                     onOpenDetailsCard()
                                 }
                                 .padding(horizontal = 20.dp, vertical = 14.dp)
@@ -709,11 +680,16 @@ fun MainWeatherScreen(
 }
 
 @Composable
-private fun WeatherStatChip(label: String, palette: ThemePalette) {
+private fun WeatherStatChip(
+    label: String,
+    palette: ThemePalette,
+    onTap: () -> Unit = {}
+) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
             .background(palette.chipBg)
+            .bouncyClick(onClick = onTap)
             .padding(horizontal = 12.dp, vertical = 7.dp)
     ) {
         Text(

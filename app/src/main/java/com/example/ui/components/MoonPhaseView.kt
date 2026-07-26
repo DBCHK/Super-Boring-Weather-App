@@ -1,11 +1,16 @@
 package com.example.ui.components
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -41,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.WeatherForecastData
 import com.example.util.MoonPhaseCalculator
+import com.example.util.rememberDropletPlayers
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -278,9 +285,30 @@ fun MoonPhaseView(
                             }
                         }
 
+                        val moonFeedback = rememberDropletPlayers()
+                        val sliderInteraction = remember { MutableInteractionSource() }
+                        val isScrubbing by sliderInteraction.collectIsDraggedAsState()
+                        val sliderScale by animateFloatAsState(
+                            targetValue = if (isScrubbing) 1.06f else 1f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMedium
+                            ),
+                            label = "moonSliderScale"
+                        )
+                        var lastTickBucket by remember { mutableIntStateOf(-1) }
+
                         Slider(
                             value = phaseScrub,
-                            onValueChange = { phaseScrub = it },
+                            onValueChange = { v ->
+                                phaseScrub = v
+                                val bucket = (v * 24f).roundToInt()
+                                if (bucket != lastTickBucket) {
+                                    lastTickBucket = bucket
+                                    moonFeedback.scrubTick(bucket)
+                                }
+                            },
+                            interactionSource = sliderInteraction,
                             colors = SliderDefaults.colors(
                                 thumbColor = Color.White,
                                 activeTrackColor = Color.White,
@@ -289,6 +317,10 @@ fun MoonPhaseView(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(end = 28.dp, top = 8.dp)
+                                .graphicsLayer {
+                                    scaleY = sliderScale
+                                    scaleX = 1f + (sliderScale - 1f) * 0.35f
+                                }
                                 .testTag("moon_phase_slider")
                         )
                     }
@@ -299,12 +331,26 @@ fun MoonPhaseView(
                             .padding(start = 10.dp, end = 36.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        repeat(7) {
+                        repeat(7) { i ->
+                            val active = (phaseScrub * 6f).roundToInt() == i
+                            val dotScale by animateFloatAsState(
+                                targetValue = if (active) 1.8f else 1f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy
+                                ),
+                                label = "moonDot$i"
+                            )
                             Box(
                                 modifier = Modifier
                                     .size(3.dp)
+                                    .graphicsLayer {
+                                        scaleX = dotScale
+                                        scaleY = dotScale
+                                    }
                                     .clip(CircleShape)
-                                    .background(Color(0xFF636366))
+                                    .background(
+                                        if (active) Color.White else Color(0xFF636366)
+                                    )
                             )
                         }
                     }
