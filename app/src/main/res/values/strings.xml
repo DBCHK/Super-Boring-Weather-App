@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">BORING WEATHER</string>
+    <string name="app_name">NOT BORING WEATHER</string>
 
     <string name="widget_red_sun_desc">Temperature with red sun orb (2×2)</string>
     <string name="widget_three_day_desc">3-day forecast (2×2)</string>

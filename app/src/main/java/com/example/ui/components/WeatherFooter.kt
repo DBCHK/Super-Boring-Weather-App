@@ -24,6 +24,7 @@ fun WeatherFooter(
 ) {
     val funMessages = remember {
         listOf(
+            "Life's too short to waste on boring apps.",
             "It's always sunny somewhere! ☀️",
             "Don't let a little rain dampen your spirits. ☔",
             "Stay cool, stay hydrated! 🧊",
@@ -31,7 +32,8 @@ fun WeatherFooter(
             "Weather is just what happens while you're busy making plans.",
             "Expect the unexpected, especially the wind. 💨",
             "Keep your head in the clouds and your feet on the ground.",
-            "A change in the weather is good for the soul."
+            "A change in the weather is good for the soul.",
+            "Touch grass. Check the sky. Repeat."
         )
     }
     val randomMessage = remember { funMessages.random() }
@@ -50,15 +52,25 @@ fun WeatherFooter(
             color = textColor.copy(alpha = 0.7f),
             textAlign = TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = "NOT BORING WEATHER",
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Black,
+            fontFamily = FontFamily.Monospace,
+            color = textColor,
+            textAlign = TextAlign.Center,
+            letterSpacing = 1.4.sp
+        )
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = "Made by Debabrata Chakraborty",
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
-            color = textColor,
+            color = textColor.copy(alpha = 0.85f),
             textAlign = TextAlign.Center,
-            letterSpacing = 1.sp
+            letterSpacing = 0.8.sp
         )
     }
 }

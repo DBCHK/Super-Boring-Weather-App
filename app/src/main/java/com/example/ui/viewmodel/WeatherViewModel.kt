@@ -74,16 +74,14 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
 
-    // Pinned Widgets State for user customization
+    // Default pin set is lean (GPU budget) — user can add more from the gallery
     private val _pinnedWidgets = MutableStateFlow(
         listOf(
             WidgetType.RED_SUN_ORB,
             WidgetType.THREE_DAY_FORECAST,
             WidgetType.WIDE_RAIN_BANNER,
             WidgetType.AIR_QUALITY,
-            WidgetType.MOON_PHASE,
-            WidgetType.WIND_COMPASS,
-            WidgetType.UV_METER
+            WidgetType.MOON_PHASE
         )
     )
     val pinnedWidgets: StateFlow<List<WidgetType>> = _pinnedWidgets.asStateFlow()

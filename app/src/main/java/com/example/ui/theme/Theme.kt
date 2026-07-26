@@ -1,52 +1,107 @@
 package com.example.ui.theme
 
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.Color
 
-private val DarkColorScheme =
-  darkColorScheme(primary = Purple80, secondary = PurpleGrey80, tertiary = Pink80)
+private val ColorWhite = Color.White
 
-private val LightColorScheme =
-  lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40,
+private val NotBoringLightScheme = lightColorScheme(
+    primary = NbColors.Ink,
+    onPrimary = ColorWhite,
+    primaryContainer = NbColors.PaperMuted,
+    onPrimaryContainer = NbColors.Ink,
+    secondary = NbColors.Sky,
+    onSecondary = ColorWhite,
+    tertiary = NbColors.Yellow,
+    onTertiary = NbColors.Ink,
+    background = NbColors.Paper,
+    onBackground = NbColors.Ink,
+    surface = NbColors.PaperPure,
+    onSurface = NbColors.Ink,
+    surfaceVariant = NbColors.PaperMuted,
+    onSurfaceVariant = NbColors.Mist,
+    error = NbColors.Danger,
+    onError = ColorWhite,
+    outline = NbColors.PaperLine
+)
 
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
-  )
+private val NotBoringYellowScheme = lightColorScheme(
+    primary = NbColors.Ink,
+    onPrimary = NbColors.Yellow,
+    primaryContainer = NbColors.Ink,
+    onPrimaryContainer = ColorWhite,
+    secondary = NbColors.Ink,
+    onSecondary = NbColors.Yellow,
+    tertiary = NbColors.ScrubHandle,
+    onTertiary = ColorWhite,
+    background = NbColors.Yellow,
+    onBackground = NbColors.Ink,
+    surface = NbColors.YellowSoft,
+    onSurface = NbColors.Ink,
+    surfaceVariant = NbColors.Ink.copy(alpha = 0.12f),
+    onSurfaceVariant = Color(0xFF3A2A00),
+    error = Color(0xFFB71C1C),
+    onError = ColorWhite,
+    outline = NbColors.Ink.copy(alpha = 0.2f)
+)
+
+private val NotBoringDarkScheme = darkColorScheme(
+    primary = ColorWhite,
+    onPrimary = NbColors.Ink,
+    primaryContainer = NbColors.InkSoft,
+    onPrimaryContainer = ColorWhite,
+    secondary = NbColors.SkyBright,
+    onSecondary = ColorWhite,
+    tertiary = NbColors.Yellow,
+    onTertiary = NbColors.Ink,
+    background = NbColors.Ink,
+    onBackground = ColorWhite,
+    surface = NbColors.InkSoft,
+    onSurface = ColorWhite,
+    surfaceVariant = NbColors.InkElevated,
+    onSurfaceVariant = NbColors.Mist,
+    error = NbColors.DangerDark,
+    onError = ColorWhite,
+    outline = NbColors.InkElevated
+)
 
 @Composable
-fun MyApplicationTheme(
-  darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color is available on Android 12+
-  dynamicColor: Boolean = true,
-  content: @Composable () -> Unit,
+fun NotBoringWeatherTheme(
+    mode: AppThemeMode = AppThemeMode.YELLOW,
+    content: @Composable () -> Unit
 ) {
-  val colorScheme =
-    when {
-      dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-        val context = LocalContext.current
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-      }
-
-      darkTheme -> DarkColorScheme
-      else -> LightColorScheme
+    val palette = ThemePalette.forMode(mode)
+    val colorScheme = when (mode) {
+        AppThemeMode.LIGHT -> NotBoringLightScheme
+        AppThemeMode.YELLOW -> NotBoringYellowScheme
+        AppThemeMode.DARK -> NotBoringDarkScheme
     }
 
-  MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
+    CompositionLocalProvider(
+        LocalThemePalette provides palette,
+        LocalAppThemeMode provides mode
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
+}
+
+/** Legacy alias — routes into [NotBoringWeatherTheme]. */
+@Composable
+fun MyApplicationTheme(
+    darkTheme: Boolean = false,
+    dynamicColor: Boolean = false,
+    content: @Composable () -> Unit
+) {
+    NotBoringWeatherTheme(
+        mode = if (darkTheme) AppThemeMode.DARK else AppThemeMode.YELLOW,
+        content = content
+    )
 }

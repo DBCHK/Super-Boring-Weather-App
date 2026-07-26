@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -38,11 +37,9 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -70,9 +67,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.WeatherCondition
+import com.example.ui.components.AirQualityHeroCard
 import com.example.ui.components.ConfettiBurst
 import com.example.ui.components.DailyGlanceRow
 import com.example.ui.components.HourlyForecastStrip
+import com.example.ui.components.LiveWidgetsView
 import com.example.ui.components.NotBoringCopy
 import com.example.ui.components.ThreeDDigitsRow
 import com.example.ui.components.ThreeDWeatherCanvas
@@ -91,6 +90,7 @@ import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.ThemePalette
 import com.example.ui.viewmodel.TemperatureUnit
 import com.example.ui.viewmodel.WeatherUiState
+import com.example.ui.viewmodel.WidgetType
 import com.example.util.rememberDropletPlayers
 import java.util.Calendar
 import kotlin.math.roundToInt
@@ -101,9 +101,11 @@ fun MainWeatherScreen(
     weatherUiState: WeatherUiState,
     selectedHourIndex: Int,
     temperatureUnit: TemperatureUnit,
-    themeMode: Int = 0,
+    themeMode: Int = 1,
     onThemeModeChange: (Int) -> Unit = {},
     lastRefreshAtMs: Long = 0L,
+    pinnedWidgets: List<WidgetType> = WidgetType.entries.toList(),
+    onToggleWidgetPin: (WidgetType) -> Unit = {},
     onHourSelected: (Int) -> Unit,
     onToggleUnit: () -> Unit,
     onOpenCitySheet: () -> Unit,
@@ -114,9 +116,9 @@ fun MainWeatherScreen(
     modifier: Modifier = Modifier
 ) {
     val appTheme = when (themeMode) {
-        1 -> AppThemeMode.YELLOW
+        0 -> AppThemeMode.LIGHT
         2 -> AppThemeMode.DARK
-        else -> AppThemeMode.LIGHT
+        else -> AppThemeMode.YELLOW
     }
     val palette = ThemePalette.forMode(appTheme)
     val backgroundColor = palette.background
@@ -127,242 +129,170 @@ fun MainWeatherScreen(
         color = backgroundColor
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Vignette behind content (yellow = stronger, light = slight; dark = none)
+            // Stage vignette — stronger on yellow, soft on light, none on dark
             if (themeMode == 0 || themeMode == 1) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val edge = if (themeMode == 1) {
                         listOf(
                             Color.Transparent,
-                            Color(0xFF8B5A00).copy(alpha = 0.20f),
-                            Color(0xFF3D2200).copy(alpha = 0.48f)
+                            Color(0xFF8B5A00).copy(alpha = 0.18f),
+                            Color(0xFF3D2200).copy(alpha = 0.42f)
                         )
                     } else {
                         listOf(
                             Color.Transparent,
-                            Color(0xFF8E8E93).copy(alpha = 0.07f),
-                            Color(0xFF1C1C1E).copy(alpha = 0.14f)
+                            Color(0xFF8E8E93).copy(alpha = 0.06f),
+                            Color(0xFF1C1C1E).copy(alpha = 0.12f)
                         )
                     }
                     drawRect(
                         brush = Brush.radialGradient(
                             colorStops = arrayOf(
                                 0.0f to edge[0],
-                                0.52f to edge[0],
-                                0.80f to edge[1],
+                                0.50f to edge[0],
+                                0.78f to edge[1],
                                 1.0f to edge[2]
                             ),
                             center = center,
-                            radius = size.maxDimension * 0.74f
+                            radius = size.maxDimension * 0.76f
                         )
                     )
                 }
             }
 
             when (weatherUiState) {
-            is WeatherUiState.Loading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        CircularProgressIndicator(
-                            color = primaryTextColor,
-                            strokeWidth = 3.dp
-                        )
-                        Text(
-                            text = "FETCHING FORECAST...",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Black,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.5.sp,
-                            color = palette.secondaryText
-                        )
-                    }
-                }
-            }
+                is WeatherUiState.Loading -> NotBoringLoading(palette = palette)
 
-            is WeatherUiState.Error -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text(
-                            text = weatherUiState.message,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            textAlign = TextAlign.Center,
-                            color = palette.danger
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(palette.chipSelectedBg)
-                                .clickable { onRetry() }
-                                .padding(horizontal = 24.dp, vertical = 12.dp)
-                                .testTag("retry_button"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = "RETRY",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Black,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = palette.chipSelectedFg
-                                )
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = "Retry",
-                                    tint = palette.chipSelectedFg
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            is WeatherUiState.Success -> {
-                val data = weatherUiState.data
-                val hourly = data.hourlyList
-                val currentHourly = hourly.getOrNull(selectedHourIndex) ?: hourly.firstOrNull()
-
-                // Index 0 / NOW always uses live current temp for the selected city
-                val displayedTemp = if (selectedHourIndex == 0 || currentHourly == null) {
-                    if (temperatureUnit == TemperatureUnit.FAHRENHEIT) data.currentTempF.roundToInt()
-                    else data.currentTempC.roundToInt()
-                } else {
-                    if (temperatureUnit == TemperatureUnit.FAHRENHEIT) currentHourly.tempF.roundToInt()
-                    else currentHourly.tempC.roundToInt()
-                }
-
-                val highTemp = if (temperatureUnit == TemperatureUnit.FAHRENHEIT) data.highTempF.roundToInt() else data.highTempC.roundToInt()
-                val lowTemp = if (temperatureUnit == TemperatureUnit.FAHRENHEIT) data.lowTempF.roundToInt() else data.lowTempC.roundToInt()
-                val condition = currentHourly?.condition ?: data.condition
-
-                val feedback = rememberDropletPlayers()
-                val playFeedback = feedback.tap
-                val scrollState = rememberScrollState()
-                var swipeUpAccum by remember { mutableFloatStateOf(0f) }
-                var showConfetti by remember { mutableStateOf(false) }
-                var shareToast by remember { mutableStateOf(false) }
-                val clipboard = LocalClipboardManager.current
-                val heroEnter = rememberEntranceProgress(delayMs = 40, durationMs = 560)
-                val chipsEnter = rememberEntranceProgress(delayMs = 180, durationMs = 520)
-                val scrubEnter = rememberEntranceProgress(delayMs = 280, durationMs = 520)
-                val featuresEnter = rememberEntranceProgress(delayMs = 360, durationMs = 560)
-                val greeting = remember {
-                    NotBoringCopy.dayPartGreeting(
-                        Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-                    )
-                }
-                val tempCForCopy = if (temperatureUnit == TemperatureUnit.CELSIUS) {
-                    displayedTemp.toFloat()
-                } else {
-                    (displayedTemp - 32) * 5f / 9f
-                }
-
-                // Subtle bounce on the "swipe up" chevron
-                val chevronBob by rememberInfiniteTransition(label = "chevron").animateFloat(
-                    initialValue = 0f,
-                    targetValue = -10f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(900, easing = FastOutSlowInEasing),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "chevronBob"
+                is WeatherUiState.Error -> NotBoringError(
+                    message = weatherUiState.message,
+                    palette = palette,
+                    onRetry = onRetry
                 )
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        // Swipe up anywhere on home to open details (creative sheet gesture)
-                        .pointerInput(Unit) {
-                            detectVerticalDragGestures(
-                                onDragEnd = {
-                                    if (swipeUpAccum < -110f) {
-                                        feedback.whooshUp()
-                                        onOpenDetailsCard()
-                                    }
-                                    swipeUpAccum = 0f
-                                },
-                                onDragCancel = { swipeUpAccum = 0f },
-                                onVerticalDrag = { change, dragAmount ->
-                                    // Prefer upward gestures; ignore small noise
-                                    if (dragAmount < 0f || swipeUpAccum < 0f) {
-                                        swipeUpAccum += dragAmount
-                                        change.consume()
-                                    }
-                                }
-                            )
-                        }
-                ) {
-                    // Background Particle Shader Canvas Layer behind giant typography
-                    WeatherBackgroundShaderCanvas(
-                        condition = condition,
-                        particlePrimary = palette.particlePrimary,
-                        particleSecondary = palette.particleSecondary,
-                        isDarkTheme = palette.isDark,
-                        windDirectionDegrees = currentHourly?.windDirectionDegrees
-                            ?: data.windDirectionDegrees,
-                        windSpeedMph = currentHourly?.windSpeedMph ?: data.windSpeedMph,
-                        modifier = Modifier.fillMaxSize()
+                is WeatherUiState.Success -> {
+                    val data = weatherUiState.data
+                    val hourly = data.hourlyList
+                    val currentHourly = hourly.getOrNull(selectedHourIndex) ?: hourly.firstOrNull()
+
+                    val displayedTemp = if (selectedHourIndex == 0 || currentHourly == null) {
+                        if (temperatureUnit == TemperatureUnit.FAHRENHEIT) data.currentTempF.roundToInt()
+                        else data.currentTempC.roundToInt()
+                    } else {
+                        if (temperatureUnit == TemperatureUnit.FAHRENHEIT) currentHourly.tempF.roundToInt()
+                        else currentHourly.tempC.roundToInt()
+                    }
+
+                    val highTemp =
+                        if (temperatureUnit == TemperatureUnit.FAHRENHEIT) data.highTempF.roundToInt()
+                        else data.highTempC.roundToInt()
+                    val lowTemp =
+                        if (temperatureUnit == TemperatureUnit.FAHRENHEIT) data.lowTempF.roundToInt()
+                        else data.lowTempC.roundToInt()
+                    val condition = currentHourly?.condition ?: data.condition
+
+                    val feedback = rememberDropletPlayers()
+                    val scrollState = rememberScrollState()
+                    var swipeUpAccum by remember { mutableFloatStateOf(0f) }
+                    var showConfetti by remember { mutableStateOf(false) }
+                    var shareToast by remember { mutableStateOf(false) }
+                    val clipboard = LocalClipboardManager.current
+                    val heroEnter = rememberEntranceProgress(delayMs = 30, durationMs = 620)
+                    val chipsEnter = rememberEntranceProgress(delayMs = 160, durationMs = 500)
+                    val scrubEnter = rememberEntranceProgress(delayMs = 240, durationMs = 500)
+                    val featuresEnter = rememberEntranceProgress(delayMs = 320, durationMs = 560)
+                    val greeting = remember {
+                        NotBoringCopy.dayPartGreeting(
+                            Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                        )
+                    }
+                    val tempCForCopy = if (temperatureUnit == TemperatureUnit.CELSIUS) {
+                        displayedTemp.toFloat()
+                    } else {
+                        (displayedTemp - 32) * 5f / 9f
+                    }
+
+                    val chevronBob by rememberInfiniteTransition(label = "chevron").animateFloat(
+                        initialValue = 0f,
+                        targetValue = -10f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(900, easing = FastOutSlowInEasing),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "chevronBob"
                     )
 
-                    // Confetti celebration layer
-                    ConfettiBurst(
-                        active = showConfetti,
-                        onFinished = { showConfetti = false }
-                    )
-
-                    Column(
+                    Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .verticalScroll(scrollState)
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Top
+                            .pointerInput(Unit) {
+                                detectVerticalDragGestures(
+                                    onDragEnd = {
+                                        if (swipeUpAccum < -110f) {
+                                            feedback.whooshUp()
+                                            onOpenDetailsCard()
+                                        }
+                                        swipeUpAccum = 0f
+                                    },
+                                    onDragCancel = { swipeUpAccum = 0f },
+                                    onVerticalDrag = { change, dragAmount ->
+                                        if (dragAmount < 0f || swipeUpAccum < 0f) {
+                                            swipeUpAccum += dragAmount
+                                            change.consume()
+                                        }
+                                    }
+                                )
+                            }
                     ) {
-                        // Compact top chrome — theme-aware chips & icons
-                        val chromeBg = palette.chromeBg
-                        val chromeFg = palette.chromeFg
-                        val chromeMuted = palette.chromeMuted
+                        WeatherBackgroundShaderCanvas(
+                            condition = condition,
+                            particlePrimary = palette.particlePrimary,
+                            particleSecondary = palette.particleSecondary,
+                            isDarkTheme = palette.isDark,
+                            windDirectionDegrees = currentHourly?.windDirectionDegrees
+                                ?: data.windDirectionDegrees,
+                            windSpeedMph = currentHourly?.windSpeedMph ?: data.windSpeedMph,
+                            modifier = Modifier.fillMaxSize()
+                        )
+
+                        ConfettiBurst(
+                            active = showConfetti,
+                            onFinished = { showConfetti = false }
+                        )
 
                         Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(scrollState)
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.fillMaxWidth()
+                            verticalArrangement = Arrangement.Top
                         ) {
-                            // Daypart greeting
+                            val chromeBg = palette.chromeBg
+                            val chromeFg = palette.chromeFg
+                            val chromeMuted = palette.chromeMuted
+
+                            // ── Signature tagline (Not Boring home) ───────────
                             Text(
-                                text = "$greeting · ${data.cityName}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                letterSpacing = 0.4.sp,
-                                color = palette.secondaryText,
+                                text = NotBoringCopy.TAGLINE,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Black,
+                                fontFamily = FontFamily.SansSerif,
+                                textAlign = TextAlign.Center,
+                                color = primaryTextColor,
+                                lineHeight = 20.sp,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 4.dp, start = 4.dp, end = 4.dp),
-                                textAlign = TextAlign.Start
+                                    .padding(top = 10.dp, start = 12.dp, end = 12.dp)
+                                    .entrance(heroEnter, risePx = 16f)
                             )
 
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Compact chrome row
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 6.dp, start = 4.dp, end = 4.dp),
+                                    .padding(horizontal = 2.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -371,7 +301,6 @@ fun MainWeatherScreen(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     modifier = Modifier.weight(1f, fill = false)
                                 ) {
-                                    // City pill
                                     Row(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(14.dp))
@@ -402,18 +331,13 @@ fun MainWeatherScreen(
                                         )
                                     }
 
-                                    // Detect location — slim circular hit target
-                                    Box(
-                                        modifier = Modifier
-                                            .size(26.dp)
-                                            .clip(CircleShape)
-                                            .background(chromeBg)
-                                            .bouncyClick {
-                                                feedback.chime()
-                                                onDetectLocation()
-                                            }
-                                            .testTag("detect_location_button"),
-                                        contentAlignment = Alignment.Center
+                                    ChromeIconButton(
+                                        bg = chromeBg,
+                                        onClick = {
+                                            feedback.chime()
+                                            onDetectLocation()
+                                        },
+                                        testTag = "detect_location_button"
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.MyLocation,
@@ -423,18 +347,14 @@ fun MainWeatherScreen(
                                         )
                                     }
 
-                                    // Theme
-                                    Box(
-                                        modifier = Modifier
-                                            .size(26.dp)
-                                            .clip(CircleShape)
-                                            .background(chromeBg)
-                                            .bouncyClick {
-                                                feedback.swoosh()
-                                                onThemeModeChange((themeMode + 1) % 3)
-                                            }
-                                            .testTag("theme_switcher_button"),
-                                        contentAlignment = Alignment.Center
+                                    ChromeIconButton(
+                                        bg = chromeBg,
+                                        onClick = {
+                                            feedback.swoosh()
+                                            // Cycle: Yellow (1) → Dark (2) → Light (0) → Yellow
+                                            onThemeModeChange((themeMode + 1) % 3)
+                                        },
+                                        testTag = "theme_switcher_button"
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Palette,
@@ -444,24 +364,20 @@ fun MainWeatherScreen(
                                         )
                                     }
 
-                                    // Share / copy snapshot
-                                    Box(
-                                        modifier = Modifier
-                                            .size(26.dp)
-                                            .clip(CircleShape)
-                                            .background(chromeBg)
-                                            .bouncyClick {
-                                                feedback.chime()
-                                                val unit = if (temperatureUnit == TemperatureUnit.CELSIUS) "C" else "F"
-                                                val blurb =
-                                                    "${data.cityName}: $displayedTemp°$unit · " +
-                                                        "${condition.label} ${conditionEmoji(condition)} · " +
-                                                        "H $highTemp° L $lowTemp° · via BORING WEATHER"
-                                                clipboard.setText(AnnotatedString(blurb))
-                                                shareToast = true
-                                            }
-                                            .testTag("share_weather_button"),
-                                        contentAlignment = Alignment.Center
+                                    ChromeIconButton(
+                                        bg = chromeBg,
+                                        onClick = {
+                                            feedback.chime()
+                                            val unit =
+                                                if (temperatureUnit == TemperatureUnit.CELSIUS) "C" else "F"
+                                            val blurb =
+                                                "${data.cityName}: $displayedTemp°$unit · " +
+                                                    "${condition.label} ${conditionEmoji(condition)} · " +
+                                                    "H $highTemp° L $lowTemp° · via NOT BORING WEATHER"
+                                            clipboard.setText(AnnotatedString(blurb))
+                                            shareToast = true
+                                        },
+                                        testTag = "share_weather_button"
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Share,
@@ -472,7 +388,6 @@ fun MainWeatherScreen(
                                     }
                                 }
 
-                                // Unit capsule — °C first (default)
                                 Row(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(14.dp))
@@ -489,367 +404,494 @@ fun MainWeatherScreen(
                                     Text(
                                         text = "°C",
                                         fontSize = 11.sp,
-                                        fontWeight = if (temperatureUnit == TemperatureUnit.CELSIUS) FontWeight.Black else FontWeight.Normal,
-                                        color = if (temperatureUnit == TemperatureUnit.CELSIUS) chromeFg else chromeMuted
+                                        fontWeight = if (temperatureUnit == TemperatureUnit.CELSIUS) {
+                                            FontWeight.Black
+                                        } else {
+                                            FontWeight.Normal
+                                        },
+                                        color = if (temperatureUnit == TemperatureUnit.CELSIUS) {
+                                            chromeFg
+                                        } else {
+                                            chromeMuted
+                                        }
                                     )
-                                    Text(
-                                        text = "|",
-                                        fontSize = 10.sp,
-                                        color = chromeMuted
-                                    )
+                                    Text(text = "|", fontSize = 10.sp, color = chromeMuted)
                                     Text(
                                         text = "°F",
                                         fontSize = 11.sp,
-                                        fontWeight = if (temperatureUnit == TemperatureUnit.FAHRENHEIT) FontWeight.Black else FontWeight.Normal,
-                                        color = if (temperatureUnit == TemperatureUnit.FAHRENHEIT) chromeFg else chromeMuted
+                                        fontWeight = if (temperatureUnit == TemperatureUnit.FAHRENHEIT) {
+                                            FontWeight.Black
+                                        } else {
+                                            FontWeight.Normal
+                                        },
+                                        color = if (temperatureUnit == TemperatureUnit.FAHRENHEIT) {
+                                            chromeFg
+                                        } else {
+                                            chromeMuted
+                                        }
                                     )
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-
-                        // Hero stick: weather + digits close (small gap, never overlapping)
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        val heroInteraction = rememberInteractive3DState(
-                            initialPitch = 12f,
-                            initialYaw = 0f,
-                            maxPitch = 48f,
-                            maxYaw = 32f,
-                            autoSpinDegPerSec = 9f,
-                            autoSpinOscillate = true
-                        )
-                        val heroStickArm = 0.36f
-
-                        // Condition-aware ambient glow (theme-tinted)
-                        val glowColor = remember(condition, palette.isDark) {
-                            conditionGlowColor(condition, palette.isDark)
-                        }
-                        val glowPulse by rememberInfiniteTransition(label = "glow").animateFloat(
-                            initialValue = 0.55f,
-                            targetValue = 1f,
-                            animationSpec = infiniteRepeatable(
-                                animation = tween(2200, easing = FastOutSlowInEasing),
-                                repeatMode = RepeatMode.Reverse
-                            ),
-                            label = "glowPulse"
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 4.dp)
-                                .entrance(heroEnter, risePx = 36f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            // Soft halo behind the stick group
-                            Canvas(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(300.dp)
-                            ) {
-                                drawCircle(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(
-                                            glowColor.copy(alpha = 0.42f * glowPulse),
-                                            glowColor.copy(alpha = 0.12f * glowPulse),
-                                            Color.Transparent
-                                        ),
-                                        center = center,
-                                        radius = size.minDimension * 0.62f
-                                    ),
-                                    radius = size.minDimension * 0.62f,
-                                    center = center
-                                )
-                            }
-
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .interactive3D(
-                                        heroInteraction,
-                                        enablePitch = true,
-                                        enableDeviceTilt = true
-                                    )
-                                    // Double-tap hero = confetti celebration (Not Boring easter egg)
-                                    .pointerInput(Unit) {
-                                        detectTapGestures(
-                                            onDoubleTap = {
-                                                feedback.splash()
-                                                showConfetti = true
-                                            }
-                                        )
-                                    }
-                            ) {
-                                ThreeDWeatherCanvas(
-                                    condition = condition,
-                                    isDaytime = currentHourly?.isDaytime ?: true,
-                                    modelScale = 1.58f,
-                                    tintColor = palette.elementFill,
-                                    shadeColor = palette.elementShade,
-                                    interactionState = heroInteraction,
-                                    enableGestures = false,
-                                    applyInteractionRotation = true,
-                                    stickArmY = heroStickArm,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(168.dp)
-                                )
-
-                                // Tight gap — close but not touching
-                                Spacer(modifier = Modifier.height(2.dp))
-
-                                ThreeDDigitsRow(
-                                    number = displayedTemp,
-                                    interactionState = heroInteraction,
-                                    scaleToUnits = 1.70f,
-                                    spacing = 0.68f,
-                                    fillColor = palette.elementFill,
-                                    shadeColor = palette.elementShade,
-                                    shadowColor = palette.elementShadow,
-                                    highlightColor = palette.elementHighlight,
-                                    enableGestures = false,
-                                    applyInteractionRotation = true,
-                                    stickArmY = -heroStickArm,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(168.dp)
-                                        // Pull digits up toward weather without overlapping
-                                        .offset(y = (-22).dp)
-                                )
-                            }
-                        }
-
-                        LaunchedEffect(shareToast) {
-                            if (shareToast) {
-                                delay(1800)
-                                shareToast = false
-                            }
-                        }
-                        AnimatedVisibility(
-                            visible = shareToast,
-                            enter = fadeIn(),
-                            exit = fadeOut()
-                        ) {
+                            // Greeting under chrome
                             Text(
-                                text = "COPIED FORECAST ✓",
+                                text = "$greeting · ${data.cityName}",
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Black,
+                                fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace,
-                                color = palette.accent,
-                                modifier = Modifier.padding(top = 6.dp)
+                                letterSpacing = 0.3.sp,
+                                color = palette.secondaryText,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp, start = 4.dp),
+                                textAlign = TextAlign.Start
                             )
-                        }
 
-                        Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
 
-                        // LIVE badge + relative refresh time
-                        LiveRefreshBadge(
-                            lastRefreshAtMs = lastRefreshAtMs,
-                            palette = palette,
-                            onRefresh = {
-                                feedback.bubble()
-                                onRefresh()
+                            // ── TOWERING HERO STICK ──────────────────────────
+                            val heroInteraction = rememberInteractive3DState(
+                                initialPitch = 14f,
+                                initialYaw = 0f,
+                                maxPitch = 48f,
+                                maxYaw = 32f,
+                                autoSpinDegPerSec = 8f,
+                                autoSpinOscillate = true
+                            )
+                            val heroStickArm = 0.42f
+
+                            val glowColor = remember(condition, palette.isDark) {
+                                conditionGlowColor(condition, palette.isDark)
                             }
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Text(
-                            text = condition.label.lowercase()
-                                .replaceFirstChar { it.titlecase() },
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            fontFamily = FontFamily.SansSerif,
-                            letterSpacing = 0.2.sp,
-                            color = primaryTextColor
-                        )
-
-                        // Comfort one-liner
-                        Text(
-                            text = comfortLine(
-                                tempC = if (temperatureUnit == TemperatureUnit.CELSIUS) {
-                                    displayedTemp.toFloat()
-                                } else {
-                                    (displayedTemp - 32) * 5f / 9f
-                                },
-                                humidity = currentHourly?.humidityPercent ?: data.humidityPercent,
-                                windMph = currentHourly?.windSpeedMph ?: data.windSpeedMph
-                            ),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            fontFamily = FontFamily.Monospace,
-                            color = palette.secondaryText,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)
-                        )
-
-                        // Quick stats chips (theme-adaptive)
-                        val humidity = currentHourly?.humidityPercent ?: data.humidityPercent
-                        val wind = (currentHourly?.windSpeedMph ?: data.windSpeedMph).roundToInt()
-                        val rain = currentHourly?.precipChancePercent ?: data.precipChancePercent
-                        val uv = (currentHourly?.uvIndex ?: data.uvIndex).roundToInt()
-                        val highLabel = "H $highTemp°"
-                        val lowLabel = "L $lowTemp°"
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .padding(bottom = 8.dp)
-                                .entrance(chipsEnter, risePx = 18f),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            WeatherStatChip(highLabel, palette) { feedback.pop() }
-                            WeatherStatChip(lowLabel, palette) { feedback.pop() }
-                            WeatherStatChip("💧 $humidity%", palette) { feedback.drip() }
-                            WeatherStatChip("💨 ${wind}mph", palette) { feedback.whooshUp() }
-                            WeatherStatChip("🌧 $rain%", palette) { feedback.bubble() }
-                            WeatherStatChip("UV $uv", palette) { feedback.plink() }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Timeline Scrubber Bar — musical scrub ticks
-                        TimelineScrubber(
-                            hourlyList = hourly,
-                            selectedIndex = selectedHourIndex,
-                            highTemp = highTemp,
-                            lowTemp = lowTemp,
-                            onHourSelected = { idx ->
-                                onHourSelected(idx)
-                            },
-                            trackColor = palette.scrubberTrack,
-                            activeColor = palette.scrubberActive,
-                            labelColor = palette.secondaryText,
-                            modifier = Modifier
-                                .padding(vertical = 8.dp)
-                                .entrance(scrubEnter, risePx = 22f)
-                                .testTag("timeline_scrubber")
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // ── Not Boring feature stack ──────────────────────────
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .entrance(featuresEnter, risePx = 32f),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            HourlyForecastStrip(
-                                hours = hourly,
-                                selectedIndex = selectedHourIndex,
-                                temperatureUnit = temperatureUnit,
-                                onHourSelected = onHourSelected
+                            val glowPulse by rememberInfiniteTransition(label = "glow").animateFloat(
+                                initialValue = 0.55f,
+                                targetValue = 1f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(2200, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Reverse
+                                ),
+                                label = "glowPulse"
                             )
 
-                            VibeMeterCard(
-                                tempC = tempCForCopy,
-                                humidity = humidity,
-                                windMph = currentHourly?.windSpeedMph ?: data.windSpeedMph,
-                                precipChance = rain,
-                                uv = currentHourly?.uvIndex ?: data.uvIndex,
-                                condition = condition
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 2.dp)
+                                    .entrance(heroEnter, risePx = 40f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Canvas(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(360.dp)
+                                ) {
+                                    drawCircle(
+                                        brush = Brush.radialGradient(
+                                            colors = listOf(
+                                                glowColor.copy(alpha = 0.38f * glowPulse),
+                                                glowColor.copy(alpha = 0.10f * glowPulse),
+                                                Color.Transparent
+                                            ),
+                                            center = center,
+                                            radius = size.minDimension * 0.58f
+                                        ),
+                                        radius = size.minDimension * 0.58f,
+                                        center = center
+                                    )
+                                }
 
-                            WeatherStoryCard(
-                                condition = condition,
-                                tempC = tempCForCopy,
-                                humidity = humidity,
-                                precipChance = rain,
-                                windMph = currentHourly?.windSpeedMph ?: data.windSpeedMph
-                            )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .interactive3D(
+                                            heroInteraction,
+                                            enablePitch = true,
+                                            enableDeviceTilt = true
+                                        )
+                                        .pointerInput(Unit) {
+                                            detectTapGestures(
+                                                onDoubleTap = {
+                                                    feedback.splash()
+                                                    showConfetti = true
+                                                }
+                                            )
+                                        }
+                                ) {
+                                    // Weather orb — large, stage-center
+                                    ThreeDWeatherCanvas(
+                                        condition = condition,
+                                        isDaytime = currentHourly?.isDaytime ?: true,
+                                        modelScale = 1.85f,
+                                        tintColor = palette.elementFill,
+                                        shadeColor = palette.elementShade,
+                                        interactionState = heroInteraction,
+                                        enableGestures = false,
+                                        applyInteractionRotation = true,
+                                        stickArmY = heroStickArm,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(190.dp)
+                                    )
 
-                            DailyGlanceRow(
-                                days = data.dailyList,
-                                temperatureUnit = temperatureUnit,
-                                onDayTap = {
-                                    feedback.whooshUp()
-                                    onOpenDetailsCard()
+                                    Spacer(modifier = Modifier.height(0.dp))
+
+                                    // Towering temperature digits
+                                    ThreeDDigitsRow(
+                                        number = displayedTemp,
+                                        interactionState = heroInteraction,
+                                        scaleToUnits = 2.15f,
+                                        spacing = 0.72f,
+                                        fillColor = palette.elementFill,
+                                        shadeColor = palette.elementShade,
+                                        shadowColor = palette.elementShadow,
+                                        highlightColor = palette.elementHighlight,
+                                        enableGestures = false,
+                                        applyInteractionRotation = true,
+                                        stickArmY = -heroStickArm,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(220.dp)
+                                            .offset(y = (-28).dp)
+                                    )
+                                }
+                            }
+
+                            LaunchedEffect(shareToast) {
+                                if (shareToast) {
+                                    delay(1800)
+                                    shareToast = false
+                                }
+                            }
+                            AnimatedVisibility(
+                                visible = shareToast,
+                                enter = fadeIn(),
+                                exit = fadeOut()
+                            ) {
+                                Text(
+                                    text = "COPIED FORECAST ✓",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = palette.accent,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                )
+                            }
+
+                            LiveRefreshBadge(
+                                lastRefreshAtMs = lastRefreshAtMs,
+                                palette = palette,
+                                onRefresh = {
+                                    feedback.bubble()
+                                    onRefresh()
                                 }
                             )
 
-                            // Fun fact strip
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Condition — big, clean, reference-style
+                            Text(
+                                text = condition.label.lowercase()
+                                    .replaceFirstChar { it.titlecase() },
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.SansSerif,
+                                letterSpacing = 0.1.sp,
+                                color = primaryTextColor
+                            )
+
+                            Text(
+                                text = comfortLine(
+                                    tempC = tempCForCopy,
+                                    humidity = currentHourly?.humidityPercent ?: data.humidityPercent,
+                                    windMph = currentHourly?.windSpeedMph ?: data.windSpeedMph
+                                ),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = FontFamily.Monospace,
+                                color = palette.secondaryText,
+                                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                            )
+
+                            // Quick stats
+                            val humidity = currentHourly?.humidityPercent ?: data.humidityPercent
+                            val wind = (currentHourly?.windSpeedMph ?: data.windSpeedMph).roundToInt()
+                            val rain = currentHourly?.precipChancePercent ?: data.precipChancePercent
+                            val uv = (currentHourly?.uvIndex ?: data.uvIndex).roundToInt()
+
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(18.dp))
-                                    .background(palette.chipBg)
-                                    .padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(bottom = 6.dp)
+                                    .entrance(chipsEnter, risePx = 18f),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(text = conditionEmoji(condition), fontSize = 22.sp)
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "AQI ${data.airQualityIndex} · ${aqiShort(data.airQualityIndex)}",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Black,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = palette.primaryText
-                                    )
-                                    Text(
-                                        text = "Double-tap the hero for confetti. Share copies your forecast.",
-                                        fontSize = 11.sp,
-                                        color = palette.secondaryText,
-                                        lineHeight = 15.sp
-                                    )
-                                }
+                                WeatherStatChip("H $highTemp°", palette) { feedback.pop() }
+                                WeatherStatChip("L $lowTemp°", palette) { feedback.pop() }
+                                WeatherStatChip("💧 $humidity%", palette) { feedback.drip() }
+                                WeatherStatChip("💨 ${wind}mph", palette) { feedback.whooshUp() }
+                                WeatherStatChip("🌧 $rain%", palette) { feedback.bubble() }
+                                WeatherStatChip("UV $uv", palette) { feedback.plink() }
                             }
-                        }
 
-                        Spacer(modifier = Modifier.height(18.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
 
-                        // Swipe-up affordance (creative sheet cue)
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .bouncyClick {
-                                    feedback.whooshUp()
-                                    onOpenDetailsCard()
-                                }
-                                .padding(horizontal = 20.dp, vertical = 14.dp)
-                                .testTag("detailed_forecast_button")
-                        ) {
-                            Box(
+                            // Timeline scrubber — high/low + blue handle energy
+                            TimelineScrubber(
+                                hourlyList = hourly,
+                                selectedIndex = selectedHourIndex,
+                                highTemp = highTemp,
+                                lowTemp = lowTemp,
+                                onHourSelected = onHourSelected,
+                                trackColor = palette.scrubberTrack,
+                                activeColor = palette.scrubberActive,
+                                labelColor = palette.secondaryText,
                                 modifier = Modifier
-                                    .width(40.dp)
-                                    .height(4.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(palette.secondaryText.copy(alpha = 0.35f))
+                                    .padding(vertical = 6.dp)
+                                    .entrance(scrubEnter, risePx = 22f)
+                                    .testTag("timeline_scrubber")
                             )
+
                             Spacer(modifier = Modifier.height(10.dp))
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowUp,
-                                contentDescription = "Swipe up for details",
-                                tint = palette.secondaryText,
-                                modifier = Modifier
-                                    .size(22.dp)
-                                    .graphicsLayer { translationY = chevronBob }
-                            )
-                            Text(
-                                text = "SWIPE UP FOR DETAILS",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                letterSpacing = 1.2.sp,
-                                color = palette.secondaryText
-                            )
-                        }
 
-                        WeatherFooter(
-                            textColor = palette.secondaryText
-                        )
+                            // Feature stack
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .entrance(featuresEnter, risePx = 32f),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                HourlyForecastStrip(
+                                    hours = hourly,
+                                    selectedIndex = selectedHourIndex,
+                                    temperatureUnit = temperatureUnit,
+                                    onHourSelected = onHourSelected
+                                )
+
+                                VibeMeterCard(
+                                    tempC = tempCForCopy,
+                                    humidity = humidity,
+                                    windMph = currentHourly?.windSpeedMph ?: data.windSpeedMph,
+                                    precipChance = rain,
+                                    uv = currentHourly?.uvIndex ?: data.uvIndex,
+                                    condition = condition
+                                )
+
+                                WeatherStoryCard(
+                                    condition = condition,
+                                    tempC = tempCForCopy,
+                                    humidity = humidity,
+                                    precipChance = rain,
+                                    windMph = currentHourly?.windSpeedMph ?: data.windSpeedMph
+                                )
+
+                                AirQualityHeroCard(aqi = data.airQualityIndex)
+
+                                DailyGlanceRow(
+                                    days = data.dailyList,
+                                    temperatureUnit = temperatureUnit,
+                                    onDayTap = {
+                                        feedback.whooshUp()
+                                        onOpenDetailsCard()
+                                    }
+                                )
+
+                                // Live widgets showcase (in-app, Not Boring style)
+                                LiveWidgetsView(
+                                    data = data,
+                                    pinnedWidgets = pinnedWidgets,
+                                    onToggleWidgetPin = onToggleWidgetPin,
+                                    temperatureUnit = temperatureUnit
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(18.dp))
+
+                            // Swipe-up affordance
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .bouncyClick {
+                                        feedback.whooshUp()
+                                        onOpenDetailsCard()
+                                    }
+                                    .padding(horizontal = 20.dp, vertical = 14.dp)
+                                    .testTag("detailed_forecast_button")
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(40.dp)
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(palette.secondaryText.copy(alpha = 0.35f))
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowUp,
+                                    contentDescription = "Swipe up for details",
+                                    tint = palette.secondaryText,
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .graphicsLayer { translationY = chevronBob }
+                                )
+                                Text(
+                                    text = "SWIPE UP FOR DETAILS",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    letterSpacing = 1.2.sp,
+                                    color = palette.secondaryText
+                                )
+                            }
+
+                            WeatherFooter(textColor = palette.secondaryText)
+                        }
                     }
                 }
             }
-            } // when
-        } // Box
-    } // Surface
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Loading / Error — branded, not Material-generic
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun NotBoringLoading(palette: ThemePalette) {
+    val pulse by rememberInfiniteTransition(label = "loadPulse").animateFloat(
+        initialValue = 0.88f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "loadPulseVal"
+    )
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+            modifier = Modifier
+                .padding(32.dp)
+                .graphicsLayer {
+                    scaleX = pulse
+                    scaleY = pulse
+                }
+        ) {
+            Text(
+                text = NotBoringCopy.TAGLINE,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.SansSerif,
+                textAlign = TextAlign.Center,
+                color = palette.primaryText,
+                lineHeight = 24.sp
+            )
+            CircularProgressIndicator(
+                color = palette.primaryText,
+                strokeWidth = 3.dp,
+                modifier = Modifier.size(36.dp)
+            )
+            Text(
+                text = "FETCHING FORECAST...",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 1.4.sp,
+                color = palette.secondaryText
+            )
+        }
+    }
+}
+
+@Composable
+private fun NotBoringError(
+    message: String,
+    palette: ThemePalette,
+    onRetry: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "PLOT TWIST",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 1.5.sp,
+                color = palette.secondaryText
+            )
+            Text(
+                text = message,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.Center,
+                color = palette.danger
+            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(palette.chipSelectedBg)
+                    .clickable { onRetry() }
+                    .padding(horizontal = 24.dp, vertical = 12.dp)
+                    .testTag("retry_button"),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "RETRY",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = FontFamily.Monospace,
+                        color = palette.chipSelectedFg
+                    )
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Retry",
+                        tint = palette.chipSelectedFg
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChromeIconButton(
+    bg: Color,
+    onClick: () -> Unit,
+    testTag: String,
+    content: @Composable () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(26.dp)
+            .clip(CircleShape)
+            .background(bg)
+            .bouncyClick(onClick = onClick)
+            .testTag(testTag),
+        contentAlignment = Alignment.Center
+    ) {
+        content()
+    }
 }
 
 @Composable
@@ -922,7 +964,7 @@ private fun LiveRefreshBadge(
                 .size(7.dp)
                 .graphicsLayer { alpha = pulse }
                 .clip(CircleShape)
-                .background(if (ageSec in 0 until 120) Color(0xFF34C759) else palette.accent)
+                .background(if (ageSec in 0 until 120) palette.liveDot else palette.accent)
         )
         Text(
             text = label,
@@ -956,13 +998,6 @@ private fun conditionGlowColor(condition: WeatherCondition, isDark: Boolean): Co
         else ->
             if (isDark) Color(0xFF8E8E93) else Color(0xFF636366)
     }
-}
-
-private fun aqiShort(aqi: Int): String = when {
-    aqi <= 50 -> "GOOD AIR"
-    aqi <= 100 -> "OK AIR"
-    aqi <= 150 -> "MEH AIR"
-    else -> "ROUGH AIR"
 }
 
 /** Playful one-liner from temp + humidity + wind. */

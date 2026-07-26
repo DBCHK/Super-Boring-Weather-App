@@ -5,7 +5,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -57,9 +56,14 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.HourlyForecast
+import com.example.ui.theme.NbColors
 import com.example.util.rememberDropletPlayers
 import kotlin.math.roundToInt
 
+/**
+ * Not Boring–style day scrubber:
+ * high · blue handle · low, time labels under the track, drag to time-travel.
+ */
 @Composable
 fun TimelineScrubber(
     hourlyList: List<HourlyForecast>,
@@ -70,7 +74,8 @@ fun TimelineScrubber(
     modifier: Modifier = Modifier,
     trackColor: Color = Color(0xFFE5E5EA),
     activeColor: Color = Color(0xFF1C1C1E),
-    labelColor: Color = Color(0xFF8E8E93)
+    labelColor: Color = Color(0xFF8E8E93),
+    handleColor: Color = NbColors.ScrubHandle
 ) {
     if (hourlyList.isEmpty()) return
 
@@ -90,7 +95,6 @@ fun TimelineScrubber(
         label = "scrubPill"
     )
 
-    // Pop the pill when hour changes
     val pillBounce = remember { Animatable(1f) }
     LaunchedEffect(selectedIndex) {
         pillBounce.snapTo(0.86f)
@@ -114,7 +118,7 @@ fun TimelineScrubber(
     )
 
     val trackScale by animateFloatAsState(
-        targetValue = if (isDragging) 1.04f else 1f,
+        targetValue = if (isDragging) 1.03f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
         label = "trackScale"
     )
@@ -137,10 +141,9 @@ fun TimelineScrubber(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Animated hour readout — flips when scrubbing
         AnimatedContent(
             targetState = "$hourLabel · $hourCondition",
             transitionSpec = {
@@ -148,7 +151,7 @@ fun TimelineScrubber(
                     (fadeOut(tween(120)) + slideOutVertically { -it / 3 } + scaleOut(targetScale = 0.92f))
             },
             label = "hourReadout",
-            modifier = Modifier.padding(bottom = 8.dp)
+            modifier = Modifier.padding(bottom = 10.dp)
         ) { text ->
             Text(
                 text = text,
@@ -156,153 +159,140 @@ fun TimelineScrubber(
                 fontWeight = FontWeight.Black,
                 fontFamily = FontFamily.Monospace,
                 letterSpacing = 0.6.sp,
-                color = if (isDragging) activeColor else labelColor
+                color = if (isDragging) handleColor else labelColor
             )
         }
 
-        Box(
+        // High · track · Low (reference layout)
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .graphicsLayer {
                     scaleX = trackScale
                     scaleY = trackScale
-                }
-                .height(56.dp)
-                .clip(RoundedCornerShape(28.dp))
-                .background(
-                    if (isDragging) {
-                        activeColor.copy(alpha = 0.10f).compositeOverTrack(trackColor)
-                    } else {
-                        trackColor
-                    }
-                )
-                .onSizeChanged { trackWidthPx = it.width.toFloat() }
-                .pointerInput(hourlyList) {
-                    detectTapGestures { offset ->
-                        selectFromX(offset.x, size.width.toFloat())
-                    }
-                }
-                .pointerInput(hourlyList) {
-                    detectDragGestures(
-                        onDragStart = { isDragging = true },
-                        onDragEnd = { isDragging = false },
-                        onDragCancel = { isDragging = false },
-                        onDrag = { change, _ ->
-                            change.consume()
-                            selectFromX(change.position.x, size.width.toFloat())
-                        }
-                    )
                 },
-            contentAlignment = Alignment.CenterStart
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Track ticks with expand + glow on selection
-            Row(
+            // High temp
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "$highTemp°",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                    fontFamily = FontFamily.Monospace,
+                    color = activeColor
+                )
+                Text(
+                    text = "HIGH",
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    color = labelColor
+                )
+            }
+
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val tickCount = hourlyList.size.coerceAtMost(12)
-                repeat(tickCount) { idx ->
-                    val mapped = (idx.toFloat() / (tickCount - 1).coerceAtLeast(1) *
-                        (hourlyList.size - 1)).roundToInt()
-                    val selected = mapped == selectedIndex
-                    val sizeDp by animateDpAsState(
-                        targetValue = when {
-                            selected && isDragging -> 12.dp
-                            selected -> 10.dp
-                            else -> 4.dp
-                        },
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMedium
-                        ),
-                        label = "tick$idx"
-                    )
-                    Box(contentAlignment = Alignment.Center) {
-                        if (selected) {
-                            Box(
-                                modifier = Modifier
-                                    .size(sizeDp + 10.dp)
-                                    .graphicsLayer {
-                                        alpha = if (isDragging) 0.35f * dragPulse else 0.22f
-                                        scaleX = if (isDragging) 0.9f + 0.2f * dragPulse else 1f
-                                        scaleY = scaleX
-                                    }
-                                    .clip(CircleShape)
-                                    .background(activeColor.copy(alpha = 0.35f))
-                            )
+                    .weight(1f)
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(trackColor)
+                    .onSizeChanged { trackWidthPx = it.width.toFloat() }
+                    .pointerInput(hourlyList) {
+                        detectTapGestures { offset ->
+                            selectFromX(offset.x, size.width.toFloat())
                         }
+                    }
+                    .pointerInput(hourlyList) {
+                        detectDragGestures(
+                            onDragStart = { isDragging = true },
+                            onDragEnd = { isDragging = false },
+                            onDragCancel = { isDragging = false },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                selectFromX(change.position.x, size.width.toFloat())
+                            }
+                        )
+                    },
+                contentAlignment = Alignment.CenterStart
+            ) {
+                // Soft fill from start → handle
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(pillOffset.coerceIn(0.02f, 1f))
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(handleColor.copy(alpha = 0.22f))
+                )
+
+                // Tick marks
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val tickCount = hourlyList.size.coerceAtMost(9)
+                    repeat(tickCount) { idx ->
+                        val mapped = (idx.toFloat() / (tickCount - 1).coerceAtLeast(1) *
+                            (hourlyList.size - 1)).roundToInt()
+                        val selected = mapped == selectedIndex
                         Box(
                             modifier = Modifier
-                                .size(sizeDp)
+                                .size(if (selected) 6.dp else 3.dp)
                                 .clip(CircleShape)
                                 .background(
-                                    if (selected) activeColor
-                                    else labelColor.copy(alpha = 0.40f)
+                                    if (selected) handleColor
+                                    else labelColor.copy(alpha = 0.35f)
                                 )
                         )
                     }
                 }
+
+                // Signature blue handle
+                val handleSizePx = with(density) { 28.dp.toPx() }
+                val travel = (trackWidthPx - handleSizePx - with(density) { 12.dp.toPx() })
+                    .coerceAtLeast(0f)
+                val bounce = pillBounce.value
+
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                x = (6.dp.toPx() + pillOffset * travel).roundToInt(),
+                                y = 0
+                            )
+                        }
+                        .graphicsLayer {
+                            val s = bounce * if (isDragging) 1.12f else 1f
+                            scaleX = s
+                            scaleY = s
+                            shadowElevation = if (isDragging) 12f else 6f
+                            alpha = if (isDragging) 0.9f + 0.1f * dragPulse else 1f
+                        }
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(handleColor)
+                )
             }
 
-            // Floating high/low pill
-            val pillBg = activeColor
-            val pillFg = if (
-                activeColor == Color.White ||
-                activeColor == Color(0xFFF5F5F7)
-            ) {
-                Color(0xFF1C1C1E)
-            } else {
-                Color.White
-            }
-            val pillMuted = pillFg.copy(alpha = 0.55f)
-            val pillWidthPx = with(density) { 112.dp.toPx() }
-            val travel = (trackWidthPx - pillWidthPx - with(density) { 16.dp.toPx() })
-                .coerceAtLeast(0f)
-            val bounce = pillBounce.value
-
-            Row(
-                modifier = Modifier
-                    .offset {
-                        IntOffset(
-                            x = (8.dp.toPx() + pillOffset * travel).roundToInt(),
-                            y = 0
-                        )
-                    }
-                    .graphicsLayer {
-                        scaleX = bounce * if (isDragging) 1.06f else 1f
-                        scaleY = bounce * if (isDragging) 1.08f else 1f
-                        shadowElevation = if (isDragging) 10f else 4f
-                    }
-                    .width(112.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(pillBg)
-                    .padding(horizontal = 14.dp, vertical = 11.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
+            // Low temp
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "${highTemp}°",
-                    fontSize = 13.sp,
+                    text = "$lowTemp°",
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Black,
                     fontFamily = FontFamily.Monospace,
-                    color = pillFg
+                    color = activeColor
                 )
-                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "|",
-                    fontSize = 12.sp,
-                    color = pillMuted
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "${lowTemp}°",
-                    fontSize = 13.sp,
+                    text = "LOW",
+                    fontSize = 8.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
-                    color = pillMuted
+                    color = labelColor
                 )
             }
         }
@@ -310,40 +300,38 @@ fun TimelineScrubber(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp)
-                .padding(top = 6.dp),
+                .padding(horizontal = 4.dp)
+                .padding(top = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = hourlyList.firstOrNull()?.timeLabel ?: "NOW",
-                fontSize = 9.sp,
-                fontFamily = FontFamily.Monospace,
-                color = labelColor
-            )
-            Text(
-                text = if (isDragging) "SCRUBBING…" else "DRAG TO TIME-TRAVEL",
-                fontSize = 9.sp,
-                fontFamily = FontFamily.Monospace,
-                letterSpacing = 0.6.sp,
-                color = if (isDragging) activeColor else labelColor.copy(alpha = 0.75f)
-            )
-            Text(
-                text = hourlyList.lastOrNull()?.timeLabel ?: "—",
-                fontSize = 9.sp,
-                fontFamily = FontFamily.Monospace,
-                color = labelColor
-            )
+            // Sample time labels like the reference (NOW · 12P · 6 · 12A · 6)
+            val labels = remember(hourlyList) {
+                val n = hourlyList.size
+                if (n <= 1) listOf("NOW")
+                else {
+                    listOf(0, n / 4, n / 2, (3 * n) / 4, n - 1)
+                        .distinct()
+                        .map { hourlyList[it].timeLabel }
+                }
+            }
+            labels.forEach { label ->
+                Text(
+                    text = label,
+                    fontSize = 9.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    color = labelColor
+                )
+            }
         }
-    }
-}
 
-/** Simple opaque composite so drag tint sits on the track without transparency mud. */
-private fun Color.compositeOverTrack(track: Color): Color {
-    val a = alpha.coerceIn(0f, 1f)
-    return Color(
-        red = red * a + track.red * (1f - a),
-        green = green * a + track.green * (1f - a),
-        blue = blue * a + track.blue * (1f - a),
-        alpha = 1f
-    )
+        Text(
+            text = if (isDragging) "SCRUBBING…" else "DRAG TO TIME-TRAVEL",
+            fontSize = 9.sp,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 0.8.sp,
+            color = if (isDragging) handleColor else labelColor.copy(alpha = 0.7f),
+            modifier = Modifier.padding(top = 6.dp)
+        )
+    }
 }

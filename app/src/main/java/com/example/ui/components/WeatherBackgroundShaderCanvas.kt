@@ -74,13 +74,14 @@ fun WeatherBackgroundShaderCanvas(
 
     val particles = remember(condition) {
         val list = mutableListOf<Particle>()
+        // Tuned down for GPU budget — still reads as lively weather, not a particle storm
         val count = when (condition) {
-            WeatherCondition.SNOWY -> 70
-            WeatherCondition.RAINY, WeatherCondition.HEAVY_RAIN -> 95
-            WeatherCondition.THUNDERSTORM -> 85
-            WeatherCondition.HAZE -> 50
-            WeatherCondition.SUNNY, WeatherCondition.CLEAR -> 42
-            else -> 38
+            WeatherCondition.SNOWY -> 42
+            WeatherCondition.RAINY, WeatherCondition.HEAVY_RAIN -> 55
+            WeatherCondition.THUNDERSTORM -> 48
+            WeatherCondition.HAZE -> 28
+            WeatherCondition.SUNNY, WeatherCondition.CLEAR -> 24
+            else -> 22
         }
         val random = Random(condition.name.hashCode())
         for (i in 0 until count) {

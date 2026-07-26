@@ -222,14 +222,14 @@ fun DetailedForecastScreen(
                 Column {
                     Text(
                         text = "Get more detailed",
-                        fontSize = 22.sp,
+                        fontSize = 24.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = FontFamily.SansSerif,
                         color = palette.primaryText
                     )
                     Text(
                         text = "forecasts",
-                        fontSize = 22.sp,
+                        fontSize = 24.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = FontFamily.SansSerif,
                         color = palette.primaryText
@@ -241,6 +241,15 @@ fun DetailedForecastScreen(
                         fontFamily = FontFamily.Monospace,
                         color = palette.secondaryText,
                         modifier = Modifier.padding(top = 4.dp)
+                    )
+                    Text(
+                        text = "MOON · AIR · UV · PRECIP · WIND",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.8.sp,
+                        color = palette.tertiaryText,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                 }
 

@@ -119,32 +119,21 @@ fun GlbModelRenderer(
         surfaceType = SurfaceType.TextureSurface
     ) {
         if (enableLighting) {
-            // Key light — sculpts form from upper-front
+            // ONE directional light only. SceneView remembers LightNode by
+            // (engine, type) — multiple DIRECTIONAL nodes alias one entity and
+            // thrash intensity/direction every recomposition (visible spin glitch).
             LightNode(
                 type = LightManager.Type.DIRECTIONAL,
-                intensity = 120_000f,
+                intensity = 150_000f,
                 color = colorOf(Color(1f, 0.98f, 0.94f)),
-                direction = Direction(0.45f, -1f, -0.65f)
-            )
-            // Cool fill — opens shadows so volume reads
-            LightNode(
-                type = LightManager.Type.DIRECTIONAL,
-                intensity = 48_000f,
-                color = colorOf(Color(0.72f, 0.80f, 1f)),
-                direction = Direction(-0.65f, -0.25f, 0.35f)
-            )
-            // Rim / back light — edge highlight = clear 3D silhouette
-            LightNode(
-                type = LightManager.Type.DIRECTIONAL,
-                intensity = 55_000f,
-                color = colorOf(Color(1f, 0.97f, 0.92f)),
-                direction = Direction(-0.15f, 0.25f, 1f)
+                direction = Direction(0.40f, -1f, -0.55f)
             )
         }
 
         modelInstance?.let { instance ->
             ModelNode(
                 modelInstance = instance,
+                autoAnimate = false,
                 scaleToUnits = scaleToUnits,
                 position = Position(
                     x = stick.x,
